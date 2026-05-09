@@ -32,6 +32,7 @@
 #include "comm.h"
 #include "common.h"
 #include "utlist.h"
+#include "state_persist.h"
 
 #define NVSHARE_DEFAULT_TQ 30
 
@@ -113,6 +114,7 @@ static void delete_client(struct nvshare_client *client)
 			free(c);
 		}
 	}
+	nvshare_state_persist(); /* callsite: delete_client */
 
 	true_or_exit(epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cfd, NULL) == 0);
 	/* See man close(2) for EINTR behavior on Linux */
@@ -144,7 +146,10 @@ static void remove_req(struct nvshare_client *client)
 		 * This client was holding the GPU lock, as it was the head of
 		 * the requests list.
 		 */
-		if (requests->client->fd == client->fd) lock_held = 0;
+		if (requests->client->fd == client->fd) {
+			lock_held = 0;
+			nvshare_state_persist(); /* callsite: remove_req (lock release) */
+		}
 	}
 	LL_FOREACH_SAFE(requests, r, tmp) {
 		if (r->client->fd == client->fd) {
@@ -197,6 +202,7 @@ again:
 	out_msg.type = scheduler_on ? SCHED_ON : SCHED_OFF;
 	if ((ret = send_message(client, &out_msg)) < 0)
 		goto out_with_msg;
+	nvshare_state_persist(); /* callsite: register_client */
 
 out_with_msg:
 	/* out_msg is global, so make sure we've zeroed it out */
@@ -310,6 +316,7 @@ try_again:
 		}
 		scheduling_round++;
 		lock_held = 1;
+		nvshare_state_persist(); /* callsite: try_schedule (lock grant) */
 		must_reset_timer = 1;
 		pthread_cond_broadcast(&timer_cv);
 	}
@@ -421,6 +428,7 @@ static void process_msg(struct nvshare_client *client, const struct message *in_
 			scheduler_on = 1;
 			log_info("Scheduler turned ON, broadcasting it...");
 			bcast_status();
+			nvshare_state_persist(); /* callsite: process_msg SCHED_ON */
 		}
 		break;
 
@@ -443,6 +451,7 @@ static void process_msg(struct nvshare_client *client, const struct message *in_
 				free(r);
 			}
 			lock_held = 0;
+			nvshare_state_persist(); /* callsite: process_msg SCHED_OFF */
 		}
 		break;
 
@@ -454,6 +463,7 @@ static void process_msg(struct nvshare_client *client, const struct message *in_
 		newtq = (int)strtoll(in_msg->data, &endptr, 0);
         	if (in_msg->data != endptr && *endptr == '\0' && errno == 0) {
 			tq = newtq;
+			nvshare_state_persist(); /* callsite: process_msg SET_TQ */
 			must_reset_timer = 1;
 			pthread_cond_broadcast(&timer_cv); /* Reset timer on TQ change */
 			log_info("New TQ = %d", tq);

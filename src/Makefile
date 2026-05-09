@@ -34,7 +34,7 @@ tarball: libnvshare.so nvshare-scheduler nvsharectl
 libnvshare.so: hook.o hook_vmm.o client.o common.o comm.o
 	$(CC) $(GENERAL_LDFLAGS) $(LIBNVSHARE_LDFLAGS) $^ -o $@ $(LIBNVSHARE_LDLIBS)
 
-nvshare-scheduler: scheduler.o common.o comm.o
+nvshare-scheduler: scheduler.o state_persist.o common.o comm.o
 	$(CC) $(CFLAGS) $(GENERAL_LDFLAGS) $^ -o $@ $(SCHEDULER_LDLIBS)
 
 nvsharectl: cli.o common.o comm.o xopt.o
@@ -53,6 +53,9 @@ common.o: common.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $^ -o $@
 
 comm.o: comm.c
+	$(CC) $(CFLAGS) $(INCLUDES) -c $^ -o $@
+
+state_persist.o: state_persist.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $^ -o $@
 
 cli.o: cli.c
