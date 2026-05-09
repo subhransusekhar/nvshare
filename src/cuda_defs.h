@@ -43,6 +43,7 @@
 #define nvmlInit                    nvmlInit_v2
 #define nvmlDeviceGetHandleByIndex  nvmlDeviceGetHandleByIndex_v2
 
+#include <stddef.h>
 #include <stdint.h>
 
 typedef uint64_t cuuint64_t;

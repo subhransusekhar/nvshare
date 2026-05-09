@@ -41,11 +41,18 @@ extern int  scheduler_on;
 extern unsigned int scheduling_round;
 
 /* Forward-declare the client struct so we can walk the linked list. */
+/*
+ * Layout MUST match the authoritative definition in scheduler.c.
+ * Cross-TU layout coupling is a time-bomb; a future cleanup
+ * (planned for the M1 agent rename) will move this struct to
+ * a shared scheduler.h.
+ */
 struct nvshare_client {
     int fd;
     uint64_t id;
     char pod_name[POD_NAME_LEN_MAX];
     char pod_namespace[POD_NAMESPACE_LEN_MAX];
+    time_t last_heartbeat_at;     /* added by issue #11 */
     struct nvshare_client *next;
 };
 extern struct nvshare_client *clients;
