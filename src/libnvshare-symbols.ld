@@ -13,41 +13,38 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Export two distinct versions of dlsym, to cover all GLIBC versions.
+ * Linker version script for libnvshare.so.
+ *
+ * The whole point of LD_PRELOAD interposition is that every CUDA Driver
+ * API and NVML symbol we hook MUST appear in the dynamic symbol table
+ * so the dynamic linker resolves the application's calls to *our*
+ * implementations. Use globs to cover everything cu* / nvml* — adding
+ * a new hook then never requires touching this file.
+ *
+ * dlsym is versioned to cover both the historical glibc (GLIBC_2.2.5)
+ * and modern glibc (GLIBC_2.34) variants, since the dynamic loader
+ * picks the version-tagged dlsym based on the caller's binding.
+ *
+ * Everything else (internal helpers, log emitters, proc-addr
+ * dispatch, etc.) is hidden via the catch-all "local: *;" so the
+ * .so's dynamic symbol surface stays small.
  */
 
-NVSHARE_PROC_ADDR {
+NVSHARE_HOOKS {
     global:
-        cuGetProcAddress;
-        cuGetProcAddress_v2;
-};
+        /* CUDA Driver API hooks: cuMemAlloc, cuLaunchKernel,
+         * cuCtxSynchronize, cuMemcpy*, cuGetProcAddress*, the VMM
+         * family (#1), the stream-ordered allocator family (#2),
+         * the UM hint APIs (#3), etc. */
+        cu*;
 
-NVSHARE_VMM {
-    global:
-        cuMemCreate;
-        cuMemAddressReserve;
-        cuMemMap;
-        cuMemSetAccess;
-        cuMemUnmap;
-        cuMemRelease;
-        nvshare_get_vmm_total_bytes;
-};
+        /* NVML hooks. */
+        nvml*;
 
-NVSHARE_ASYNC_ALLOC {
-    global:
-        cuMemAllocAsync;
-        cuMemFreeAsync;
-        cuMemAllocFromPoolAsync;
-        cuMemPoolCreate;
-        cuMemPoolDestroy;
-        nvshare_get_async_alloc_total;
-};
-
-NVSHARE_UM_HINTS {
-    global:
-        cuMemPrefetchAsync;
-        cuMemAdvise;
-        cuMemRangeGetAttribute;
+        /* Introspection helpers exposed for telemetry / tests. */
+        nvshare_get_*;
+    local:
+        *;
 };
 
 GLIBC_2.2.5 {
