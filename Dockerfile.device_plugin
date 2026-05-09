@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM golang:1.15.15 as build
+FROM --platform=$BUILDPLATFORM golang:1.15.15 as build
+ARG TARGETARCH
 COPY ./kubernetes/device-plugin/ /build
 WORKDIR /build
 RUN export GO111MODULE=on && \
     export CGO_ENABLED=0  && \
     export GOOS=linux && \
+    export GOARCH=$TARGETARCH && \
     go mod download && \
     go build -a -ldflags="-s -w" -o nvshare-device-plugin
 
