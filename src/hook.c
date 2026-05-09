@@ -310,6 +310,42 @@ static void bootstrap_cuda(void)
 	error = dlerror();
 	if (error != NULL)
 		log_debug("cuMemRelease not found: %s", error);
+
+	/* Async-alloc family — non-fatal: requires CUDA 11.2+ */
+	dlerror();
+	real_cuMemAllocAsync = (cuMemAllocAsync_func)
+		real_dlsym_225(cuda_handle, "cuMemAllocAsync");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemAllocAsync not found: %s", error);
+
+	dlerror();
+	real_cuMemFreeAsync = (cuMemFreeAsync_func)
+		real_dlsym_225(cuda_handle, "cuMemFreeAsync");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemFreeAsync not found: %s", error);
+
+	dlerror();
+	real_cuMemAllocFromPoolAsync = (cuMemAllocFromPoolAsync_func)
+		real_dlsym_225(cuda_handle, "cuMemAllocFromPoolAsync");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemAllocFromPoolAsync not found: %s", error);
+
+	dlerror();
+	real_cuMemPoolCreate = (cuMemPoolCreate_func)
+		real_dlsym_225(cuda_handle, "cuMemPoolCreate");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemPoolCreate not found: %s", error);
+
+	dlerror();
+	real_cuMemPoolDestroy = (cuMemPoolDestroy_func)
+		real_dlsym_225(cuda_handle, "cuMemPoolDestroy");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemPoolDestroy not found: %s", error);
 }
 
 /*
@@ -528,6 +564,16 @@ void *dlsym_225(void *handle, const char *symbol)
 		return (void *)(&cuMemUnmap);
 	} else if (strcmp(symbol, "cuMemRelease") == 0) {
 		return (void *)(&cuMemRelease);
+	} else if (strcmp(symbol, "cuMemAllocAsync") == 0) {
+		return (void *)(&cuMemAllocAsync);
+	} else if (strcmp(symbol, "cuMemFreeAsync") == 0) {
+		return (void *)(&cuMemFreeAsync);
+	} else if (strcmp(symbol, "cuMemAllocFromPoolAsync") == 0) {
+		return (void *)(&cuMemAllocFromPoolAsync);
+	} else if (strcmp(symbol, "cuMemPoolCreate") == 0) {
+		return (void *)(&cuMemPoolCreate);
+	} else if (strcmp(symbol, "cuMemPoolDestroy") == 0) {
+		return (void *)(&cuMemPoolDestroy);
 	}
 
 	return (real_dlsym_225(handle, symbol));
@@ -579,6 +625,16 @@ void *dlsym_234(void *handle, const char *symbol)
 		return (void *)(&cuMemUnmap);
 	} else if (strcmp(symbol, "cuMemRelease") == 0) {
 		return (void *)(&cuMemRelease);
+	} else if (strcmp(symbol, "cuMemAllocAsync") == 0) {
+		return (void *)(&cuMemAllocAsync);
+	} else if (strcmp(symbol, "cuMemFreeAsync") == 0) {
+		return (void *)(&cuMemFreeAsync);
+	} else if (strcmp(symbol, "cuMemAllocFromPoolAsync") == 0) {
+		return (void *)(&cuMemAllocFromPoolAsync);
+	} else if (strcmp(symbol, "cuMemPoolCreate") == 0) {
+		return (void *)(&cuMemPoolCreate);
+	} else if (strcmp(symbol, "cuMemPoolDestroy") == 0) {
+		return (void *)(&cuMemPoolDestroy);
 	}
 
 	return (real_dlsym_234(handle, symbol));
@@ -661,6 +717,16 @@ CUresult cuGetProcAddress(const char *symbol, void **pfn, int cudaVersion,
 		*pfn = (void *)(&cuMemUnmap);
 	} else if (strcmp(symbol, "cuMemRelease") == 0) {
 		*pfn = (void *)(&cuMemRelease);
+	} else if (strcmp(symbol, "cuMemAllocAsync") == 0) {
+		*pfn = (void *)(&cuMemAllocAsync);
+	} else if (strcmp(symbol, "cuMemFreeAsync") == 0) {
+		*pfn = (void *)(&cuMemFreeAsync);
+	} else if (strcmp(symbol, "cuMemAllocFromPoolAsync") == 0) {
+		*pfn = (void *)(&cuMemAllocFromPoolAsync);
+	} else if (strcmp(symbol, "cuMemPoolCreate") == 0) {
+		*pfn = (void *)(&cuMemPoolCreate);
+	} else if (strcmp(symbol, "cuMemPoolDestroy") == 0) {
+		*pfn = (void *)(&cuMemPoolDestroy);
 	} else {
 		result = real_cuGetProcAddress(symbol, pfn, cudaVersion, flags);
 	}
@@ -735,6 +801,16 @@ CUresult cuGetProcAddress_v2(const char *symbol, void **pfn, int cudaVersion,
 		*pfn = (void *)(&cuMemUnmap);
 	} else if (strcmp(symbol, "cuMemRelease") == 0) {
 		*pfn = (void *)(&cuMemRelease);
+	} else if (strcmp(symbol, "cuMemAllocAsync") == 0) {
+		*pfn = (void *)(&cuMemAllocAsync);
+	} else if (strcmp(symbol, "cuMemFreeAsync") == 0) {
+		*pfn = (void *)(&cuMemFreeAsync);
+	} else if (strcmp(symbol, "cuMemAllocFromPoolAsync") == 0) {
+		*pfn = (void *)(&cuMemAllocFromPoolAsync);
+	} else if (strcmp(symbol, "cuMemPoolCreate") == 0) {
+		*pfn = (void *)(&cuMemPoolCreate);
+	} else if (strcmp(symbol, "cuMemPoolDestroy") == 0) {
+		*pfn = (void *)(&cuMemPoolDestroy);
 	} else {
 		result = real_cuGetProcAddress_v2(symbol, pfn, cudaVersion,
 				                  flags, symbolStatus);

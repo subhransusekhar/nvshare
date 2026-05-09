@@ -27,6 +27,16 @@ NVSHARE_VMM {
         nvshare_get_vmm_total_bytes;
 };
 
+NVSHARE_ASYNC_ALLOC {
+    global:
+        cuMemAllocAsync;
+        cuMemFreeAsync;
+        cuMemAllocFromPoolAsync;
+        cuMemPoolCreate;
+        cuMemPoolDestroy;
+        nvshare_get_async_alloc_total;
+};
+
 GLIBC_2.2.5 {
     global:
         dlsym;

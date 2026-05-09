@@ -208,6 +208,48 @@ extern cuMemSetAccess_func       real_cuMemSetAccess;
 extern cuMemUnmap_func           real_cuMemUnmap;
 extern cuMemRelease_func         real_cuMemRelease;
 
+/* CUDA Stream-Ordered Allocator (async-alloc) types — CUDA 11.2+ */
+typedef struct CUmemPoolHandle_st *CUmemoryPool;
+
+typedef struct CUmemPoolProps_st {
+	/* treat as opaque; we never dereference it, just pass through */
+	unsigned int memtypeFlags;
+	unsigned int handleTypes;
+	struct {
+		unsigned int type;
+		int id;
+	} location;
+	void *win32SecurityAttributes;
+	unsigned char reserved[64];
+} CUmemPoolProps;
+
+typedef CUresult (*cuMemAllocAsync_func)(CUdeviceptr *dptr, size_t bytesize,
+	CUstream hStream);
+typedef CUresult (*cuMemFreeAsync_func)(CUdeviceptr dptr, CUstream hStream);
+typedef CUresult (*cuMemAllocFromPoolAsync_func)(CUdeviceptr *dptr,
+	size_t bytesize, CUmemoryPool pool, CUstream hStream);
+typedef CUresult (*cuMemPoolCreate_func)(CUmemoryPool *pool,
+	const CUmemPoolProps *poolProps);
+typedef CUresult (*cuMemPoolDestroy_func)(CUmemoryPool pool);
+
+/* Hooked async-alloc CUDA functions */
+extern CUresult cuMemAllocAsync(CUdeviceptr *dptr, size_t bytesize,
+	CUstream hStream);
+extern CUresult cuMemFreeAsync(CUdeviceptr dptr, CUstream hStream);
+extern CUresult cuMemAllocFromPoolAsync(CUdeviceptr *dptr, size_t bytesize,
+	CUmemoryPool pool, CUstream hStream);
+extern CUresult cuMemPoolCreate(CUmemoryPool *pool,
+	const CUmemPoolProps *poolProps);
+extern CUresult cuMemPoolDestroy(CUmemoryPool pool);
+extern size_t nvshare_get_async_alloc_total(void);
+
+/* Real async-alloc CUDA function pointers */
+extern cuMemAllocAsync_func          real_cuMemAllocAsync;
+extern cuMemFreeAsync_func           real_cuMemFreeAsync;
+extern cuMemAllocFromPoolAsync_func  real_cuMemAllocFromPoolAsync;
+extern cuMemPoolCreate_func          real_cuMemPoolCreate;
+extern cuMemPoolDestroy_func         real_cuMemPoolDestroy;
+
 /* Hooked CUDA functions */
 extern CUresult cuGetProcAddress(const char *symbol, void **pfn,
 	int cudaVersion, cuuint64_t flags);
