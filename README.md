@@ -47,6 +47,8 @@ I've written a [Medium article](https://grgalex.medium.com/gpu-virtualization-in
 - [Feedback](#feedbk)
 - [Cite This Work](#cite)
 
+**Operator runbook:** see `docs/runbook.md` for installation verification, env vars, and common-failure mitigation.
+
 <a name="features"/>
 
 ## Features

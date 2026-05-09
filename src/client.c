@@ -366,14 +366,56 @@ void *client_fn(void *arg __attribute__((unused)))
 	out_msg.type = REGISTER;
 	/* out_msg.id is 0 / unset on first connect; scheduler generates a new id. */
 
-	true_or_exit(nvshare_connect(&rsock, nvscheduler_socket_path) == 0);
-	true_or_exit(write_whole(rsock, &out_msg, sizeof(out_msg)) == sizeof(out_msg));
+	/*
+	 * Fail-soft initial connect: if the scheduler socket is absent or
+	 * refuses the connection, degrade gracefully instead of aborting.
+	 * The library continues to operate — cudaMalloc is still routed to
+	 * managed memory — but anti-thrash is silently disabled
+	 * (own_lock = 1 means every REQ_LOCK is an immediate no-op).
+	 */
+	if (nvshare_connect(&rsock, nvscheduler_socket_path) != 0) {
+		log_warn("client: scheduler unreachable (%s); running without anti-thrash",
+			 nvscheduler_socket_path);
+		pthread_mutex_lock(&global_mutex);
+		rsock = -1;
+		scheduler_on = 0;
+		own_lock = 1;
+		need_lock = 0;
+		pthread_mutex_unlock(&global_mutex);
+		true_or_exit(sem_post(&got_initial_sched_status) == 0);
+		return NULL; /* heartbeat thread not started; nothing to do */
+	}
+	if (write_whole(rsock, &out_msg, sizeof(out_msg)) != (ssize_t)sizeof(out_msg)) {
+		log_warn("client: failed to send REGISTER to scheduler;"
+			 " running without anti-thrash");
+		close(rsock);
+		pthread_mutex_lock(&global_mutex);
+		rsock = -1;
+		scheduler_on = 0;
+		own_lock = 1;
+		need_lock = 0;
+		pthread_mutex_unlock(&global_mutex);
+		true_or_exit(sem_post(&got_initial_sched_status) == 0);
+		return NULL;
+	}
 	log_debug("Sent %s", message_type_string[out_msg.type]);
 
 	/*
 	 * Obtain the initial nvshare-scheduler status.
 	 */
-	true_or_exit(nvshare_receive_block(rsock, &in_msg, sizeof(in_msg)) == sizeof(in_msg));
+	if (nvshare_receive_block(rsock, &in_msg, sizeof(in_msg)) != (ssize_t)sizeof(in_msg)) {
+		log_warn("client: incomplete reply from scheduler;"
+			 " running without anti-thrash");
+		close(rsock);
+		pthread_mutex_lock(&global_mutex);
+		rsock = -1;
+		scheduler_on = 0;
+		own_lock = 1;
+		need_lock = 0;
+		pthread_mutex_unlock(&global_mutex);
+		true_or_exit(sem_post(&got_initial_sched_status) == 0);
+		return NULL;
+	}
 
 handle_initial_reply:
 	switch (in_msg.type) {
