@@ -115,12 +115,162 @@ void nvshare_state_persist(void)
 }
 
 /*
- * Loader is the implementation of issue #10; stub kept here so the
- * header signature is satisfied and #10 only needs to fill in the parser.
+ * Hand-rolled JSON parser for the state written by nvshare_state_persist().
+ *
+ * The schema is fixed and fields are written in a known order:
+ *   version, lock_held, tq, scheduler_on, scheduling_round, clients[]
+ *
+ * Parsing strategy: advance a char* cursor through the buffer, using
+ * strstr() to locate each key, then sscanf / strtoul to extract values.
+ * No recursive descent needed — the structure has only one level of nesting
+ * (the clients array contains flat objects).
+ *
+ * Returns 0 on success, -1 on any parse error or missing file.
+ * On -1, *out is zeroed.
  */
 int nvshare_state_load(struct loaded_state *out)
 {
-    /* See issue #10 for the parser. */
-    (void)out;
+    FILE *f;
+    char buf[65536]; /* ample for 64 clients */
+    size_t n;
+    char *p, *q;
+    int version;
+    int i;
+
+    memset(out, 0, sizeof(*out));
+
+    f = fopen(STATE_PATH, "r");
+    if (f == NULL) {
+        /* Missing file is normal on first start */
+        return -1;
+    }
+
+    n = fread(buf, 1, sizeof(buf) - 1, f);
+    fclose(f);
+    if (n == 0)
+        return -1;
+    buf[n] = '\0';
+
+    /* --- version --- */
+    p = strstr(buf, "\"version\"");
+    if (!p) goto bad;
+    p = strchr(p, ':');
+    if (!p) goto bad;
+    if (sscanf(p + 1, " %d", &version) != 1) goto bad;
+    if (version != 1) {
+        log_warn("state_persist: unsupported state version %d", version);
+        goto bad;
+    }
+
+    /* --- lock_held --- */
+    p = strstr(buf, "\"lock_held\"");
+    if (!p) goto bad;
+    p = strchr(p, ':');
+    if (!p) goto bad;
+    if (sscanf(p + 1, " %d", &out->lock_held) != 1) goto bad;
+
+    /* --- tq --- */
+    p = strstr(buf, "\"tq\"");
+    if (!p) goto bad;
+    p = strchr(p, ':');
+    if (!p) goto bad;
+    if (sscanf(p + 1, " %d", &out->tq) != 1) goto bad;
+
+    /* --- scheduler_on --- */
+    p = strstr(buf, "\"scheduler_on\"");
+    if (!p) goto bad;
+    p = strchr(p, ':');
+    if (!p) goto bad;
+    if (sscanf(p + 1, " %d", &out->scheduler_on) != 1) goto bad;
+
+    /* --- scheduling_round --- */
+    p = strstr(buf, "\"scheduling_round\"");
+    if (!p) goto bad;
+    p = strchr(p, ':');
+    if (!p) goto bad;
+    if (sscanf(p + 1, " %u", &out->scheduling_round) != 1) goto bad;
+
+    /* --- clients array --- */
+    p = strstr(buf, "\"clients\"");
+    if (!p) goto bad;
+    p = strchr(p, '[');
+    if (!p) goto bad;
+
+    i = 0;
+    while (i < 64) {
+        /* Find next object opening brace within the array */
+        q = strchr(p + 1, '{');
+        if (!q) break; /* end of array */
+
+        /* Check we haven't wandered outside the array */
+        {
+            char *arr_end = strchr(p + 1, ']');
+            if (arr_end && arr_end < q) break;
+        }
+        p = q;
+
+        /* id — stored as decimal uint64 in the JSON */
+        q = strstr(p, "\"id\"");
+        if (!q) break;
+        q = strchr(q, ':');
+        if (!q) break;
+        {
+            unsigned long long tmp_id;
+            if (sscanf(q + 1, " %llu", &tmp_id) != 1) goto bad;
+            out->clients[i].id = (uint64_t)tmp_id;
+        }
+
+        /* pod_name */
+        q = strstr(p, "\"pod_name\"");
+        if (!q) break;
+        q = strchr(q, ':');
+        if (!q) break;
+        q = strchr(q, '"');
+        if (!q) break;
+        q++; /* skip opening quote */
+        {
+            char *end = strchr(q, '"');
+            if (!end) goto bad;
+            size_t len = (size_t)(end - q);
+            if (len >= POD_NAME_LEN_MAX) len = POD_NAME_LEN_MAX - 1;
+            memcpy(out->clients[i].pod_name, q, len);
+            out->clients[i].pod_name[len] = '\0';
+            p = end; /* advance cursor past pod_name value */
+        }
+
+        /* pod_namespace */
+        q = strstr(p, "\"pod_namespace\"");
+        if (!q) break;
+        q = strchr(q, ':');
+        if (!q) break;
+        q = strchr(q, '"');
+        if (!q) break;
+        q++; /* skip opening quote */
+        {
+            char *end = strchr(q, '"');
+            if (!end) goto bad;
+            size_t len = (size_t)(end - q);
+            if (len >= POD_NAMESPACE_LEN_MAX) len = POD_NAMESPACE_LEN_MAX - 1;
+            memcpy(out->clients[i].pod_namespace, q, len);
+            out->clients[i].pod_namespace[len] = '\0';
+            p = end;
+        }
+
+        i++;
+    }
+
+    out->n_clients = i;
+    if (out->n_clients == 64)
+        log_warn("state_persist: loaded max 64 clients; any beyond that were truncated");
+
+    log_debug("state_persist: loaded version=%d lock_held=%d tq=%d"
+              " scheduler_on=%d scheduling_round=%u n_clients=%d",
+              version, out->lock_held, out->tq, out->scheduler_on,
+              out->scheduling_round, out->n_clients);
+    return 0;
+
+bad:
+    log_warn("state_persist: failed to parse %s — starting fresh", STATE_PATH);
+    memset(out, 0, sizeof(*out));
     return -1;
 }

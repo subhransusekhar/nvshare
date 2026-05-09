@@ -71,6 +71,64 @@ struct nvshare_request {
 struct nvshare_client *clients = NULL;
 struct nvshare_request *requests = NULL;
 
+/*
+ * Expected-clients list: entries added at startup from state.json.
+ * When a REGISTER arrives with a matching id, we reuse that id instead
+ * of generating a new one, binding the new FD to the known identity.
+ * Entries are singly-linked and freed on match or at startup cleanup.
+ */
+struct expected_client {
+    uint64_t id;
+    char pod_name[POD_NAME_LEN_MAX];
+    struct expected_client *next;
+};
+static struct expected_client *expected_clients = NULL;
+
+/*
+ * Wall-clock time at which we loaded state.  Used to implement the
+ * 10-second grace window for a lock-held resume: if no client claims
+ * the lock within 10 s, we drop it back to FREE.
+ */
+static time_t resumed_at = 0;
+
+static void expected_clients_add(uint64_t id, const char *pod_name)
+{
+    struct expected_client *e = malloc(sizeof(*e));
+    if (!e) { log_warn("expected_clients_add: malloc failed"); return; }
+    e->id = id;
+    strlcpy(e->pod_name, pod_name, sizeof(e->pod_name));
+    e->next = expected_clients;
+    expected_clients = e;
+}
+
+/*
+ * Look up and remove an entry by id from expected_clients.
+ * Returns the matched entry (caller must free) or NULL if not found.
+ */
+static struct expected_client *expected_clients_take(uint64_t id)
+{
+    struct expected_client *e, *prev = NULL;
+    for (e = expected_clients; e; prev = e, e = e->next) {
+        if (e->id == id) {
+            if (prev) prev->next = e->next;
+            else expected_clients = e->next;
+            e->next = NULL;
+            return e;
+        }
+    }
+    return NULL;
+}
+
+/* Returns 1 if any connected client currently holds the lock token. */
+static int any_client_with_active_lock(void)
+{
+    struct nvshare_request *r;
+    if (!lock_held) return 0;
+    /* The lock holder is always the head of the requests list. */
+    r = requests;
+    return (r != NULL && r->client != NULL);
+}
+
 void *timer_thr_fn(void *arg __attribute__((unused)));
 void *heartbeat_sweep_thr_fn(void *arg __attribute__((unused)));
 
@@ -168,6 +226,7 @@ static int register_client(struct nvshare_client *client, const struct message *
 	int ret;
 	struct nvshare_client *c;
 	uint64_t nvshare_client_id;
+	struct expected_client *known = NULL;
 
 	if (has_registered(client)) {
 		log_warn("Client %016" PRIx64 " is already registered",
@@ -175,13 +234,29 @@ static int register_client(struct nvshare_client *client, const struct message *
 		return -1;
 	}
 
+	/*
+	 * If the connecting client presents a known id (from a previous
+	 * scheduler incarnation), reuse that id and rebind this FD to it.
+	 * This is the reconnect path after a scheduler restart.
+	 */
+	if (in_msg->id != NVSHARE_UNREGISTERED_ID && in_msg->id != 0)
+		known = expected_clients_take(in_msg->id);
+
+	if (known) {
+		nvshare_client_id = known->id;
+		free(known);
+		log_info("register_client: reconnect — reusing id %016" PRIx64,
+			 nvshare_client_id);
+	} else {
+		/* New client — generate a fresh id. */
 again:
-	nvshare_client_id = nvshare_generate_id();
-	if (nvshare_client_id == NVSHARE_UNREGISTERED_ID) /* Tough luck */
-		goto again;
-	LL_FOREACH(clients, c) {
-		if (c->id == nvshare_client_id) { /* ID clash */
+		nvshare_client_id = nvshare_generate_id();
+		if (nvshare_client_id == NVSHARE_UNREGISTERED_ID) /* Tough luck */
 			goto again;
+		LL_FOREACH(clients, c) {
+			if (c->id == nvshare_client_id) { /* ID clash */
+				goto again;
+			}
 		}
 	}
 
@@ -304,6 +379,22 @@ static int receive_message(struct nvshare_client *client, struct message *msg_p)
 static void try_schedule(void)
 {
 	int ret;
+
+	/*
+	 * Lock-held grace window: if we resumed from state.json with
+	 * lock_held=1 but no client has re-REGISTERed to claim that lock
+	 * within 10 seconds, drop lock_held back to FREE so the scheduler
+	 * doesn't stall indefinitely.
+	 */
+	if (lock_held && resumed_at != 0 && !any_client_with_active_lock()) {
+		if (time(NULL) - resumed_at > 10) {
+			log_warn("try_schedule: lock_held grace window expired;"
+				 " no client reclaimed lock — dropping to FREE");
+			lock_held = 0;
+			resumed_at = 0;
+			nvshare_state_persist(); /* callsite: grace-window expiry */
+		}
+	}
 
 try_again:
 	if (requests == NULL) {
@@ -648,6 +739,31 @@ int main(int argc __attribute__((unused)), char *argv[] __attribute__((unused)))
 		log_fatal("chmod() failed for %s", nvscheduler_socket_path);
 
 	out_msg.id = 7331;
+
+	/*
+	 * Attempt to resume from persisted state (issue #10).
+	 * Must happen after the listen socket is up so that clients
+	 * re-connecting immediately after the scheduler restarts are
+	 * accepted into the epoll loop.
+	 */
+	{
+		struct loaded_state ls = {0};
+		if (nvshare_state_load(&ls) == 0) {
+			lock_held        = ls.lock_held;
+			tq               = ls.tq;
+			scheduler_on     = ls.scheduler_on;
+			scheduling_round = ls.scheduling_round;
+			for (int i = 0; i < ls.n_clients; i++)
+				expected_clients_add(ls.clients[i].id,
+						     ls.clients[i].pod_name);
+			if (lock_held)
+				resumed_at = time(NULL);
+			log_debug("scheduler: resumed from state: lock_held=%d"
+				  " clients_expected=%d", lock_held, ls.n_clients);
+			log_info("scheduler: resumed from state.json — %d client(s) expected",
+				 ls.n_clients);
+		}
+	}
 
 	log_info("nvshare-scheduler listening on %s",
 		 nvscheduler_socket_path);

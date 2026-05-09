@@ -246,19 +246,71 @@ void *heartbeat_thread(void *arg __attribute__((unused)))
 }
 
 
+/*
+ * try_connect_and_register() — (re)connect to the scheduler and send REGISTER.
+ *
+ * On a reconnect attempt, out_msg->id is the previously-cached
+ * nvshare_client_id so the scheduler can match this client to its
+ * expected-clients set and reuse the same identity.
+ *
+ * Returns 0 and fills in_msg with the REGISTER reply on success,
+ * or -1 on any connection/protocol error.
+ */
+static int try_connect_and_register(struct message *out_msg, struct message *in_msg)
+{
+	int fd;
+
+	if (nvshare_connect(&fd, nvscheduler_socket_path) != 0)
+		return -1;
+
+	if (write_whole(fd, out_msg, sizeof(*out_msg)) != (ssize_t)sizeof(*out_msg)) {
+		close(fd);
+		return -1;
+	}
+	log_debug("Sent %s (id=%016" PRIx64 ")",
+		  message_type_string[out_msg->type], out_msg->id);
+
+	if (nvshare_receive_block(fd, in_msg, sizeof(*in_msg)) != (ssize_t)sizeof(*in_msg)) {
+		close(fd);
+		return -1;
+	}
+
+	if (in_msg->type != SCHED_ON && in_msg->type != SCHED_OFF) {
+		close(fd);
+		return -1;
+	}
+
+	/* Update the global socket fd under the lock. */
+	pthread_mutex_lock(&global_mutex);
+	rsock = fd;
+	pthread_mutex_unlock(&global_mutex);
+
+	return 0;
+}
+
+
 /* The nvshare client main thread.
  *
  * Does the following:
  * 1. Registers client to the nvshare-scheduler
  * 2. Listens for messages from the nvshare-scheduler on a persistent connection
+ * 3. On EOF / ECONNRESET, attempts to reconnect and re-REGISTER (up to 30
+ *    retries, 1 s apart).  On exhaustion, degrades to no-anti-thrash mode
+ *    (subsequent REQ_LOCK calls behave as if scheduler_on == 0).
  */
 void *client_fn(void *arg __attribute__((unused)))
 {
 	struct message in_msg;
 	struct message out_msg;
 	CUresult cu_err = CUDA_SUCCESS;
+	int initial_connect = 1; /* first connection vs. reconnect */
+	/* Saved pod identity — preserved across the post-REGISTER out_msg reset. */
+	char saved_pod_name[POD_NAME_LEN_MAX];
+	char saved_pod_namespace[POD_NAMESPACE_LEN_MAX];
 
 	memset(&out_msg, 0, sizeof(out_msg));
+	memset(saved_pod_name, 0, sizeof(saved_pod_name));
+	memset(saved_pod_namespace, 0, sizeof(saved_pod_namespace));
 	out_msg.id = 1234;
 
 	/*
@@ -282,21 +334,28 @@ void *client_fn(void *arg __attribute__((unused)))
 		strlcpy(out_msg.pod_name, "none", sizeof(out_msg.pod_name));
 	}
 
+	/* Preserve pod identity for reconnect messages after out_msg is reset. */
+	strlcpy(saved_pod_name, out_msg.pod_name, sizeof(saved_pod_name));
+	strlcpy(saved_pod_namespace, out_msg.pod_namespace, sizeof(saved_pod_namespace));
+
 	log_debug("NVSHARE_POD_NAME = %s", out_msg.pod_name);
 	log_debug("NVSHARE_POD_NAMESPACE = %s", out_msg.pod_namespace);
 
 	true_or_exit(nvshare_get_scheduler_path(nvscheduler_socket_path) == 0);
 
 	out_msg.type = REGISTER;
+	/* out_msg.id is 0 / unset on first connect; scheduler generates a new id. */
 
 	true_or_exit(nvshare_connect(&rsock, nvscheduler_socket_path) == 0);
 	true_or_exit(write_whole(rsock, &out_msg, sizeof(out_msg)) == sizeof(out_msg));
 	log_debug("Sent %s", message_type_string[out_msg.type]);
 
 	/*
-	 * Obtain the inital nvshare-scheduler status
+	 * Obtain the initial nvshare-scheduler status.
 	 */
 	true_or_exit(nvshare_receive_block(rsock, &in_msg, sizeof(in_msg)) == sizeof(in_msg));
+
+handle_initial_reply:
 	switch (in_msg.type) {
 	case SCHED_ON:
 		log_debug("Received %s", message_type_string[in_msg.type]);
@@ -318,25 +377,92 @@ void *client_fn(void *arg __attribute__((unused)))
 		scheduler_on = 0;
 		own_lock = 1;
 		need_lock = 0;
-
 		break;
+
 	default:
 		log_fatal("Got message with type (%d) instead of initial"
 			  " nvshare-scheduler status", (int)in_msg.type);
 		break;
 	}
 
-	/* The ID will not change henceforth. Fill it in now. */
+	/*
+	 * The id is now stable (either freshly assigned or the previously-cached
+	 * one reconfirmed by the scheduler).  Embed it in every future message.
+	 */
 	memset(&out_msg, 0, sizeof(out_msg));
-	out_msg.id = nvshare_client_id;
+	out_msg.id = nvshare_client_id; /* cached id — used on reconnects */
 
-	true_or_exit(sem_post(&got_initial_sched_status) == 0);
+	if (initial_connect) {
+		initial_connect = 0;
+		true_or_exit(sem_post(&got_initial_sched_status) == 0);
 
-	/* Start the heartbeat thread now that we have a valid rsock and ID */
-	true_or_exit(pthread_create(&heartbeat_tid, NULL, heartbeat_thread, NULL) == 0);
+		/* Start the heartbeat thread now that we have a valid rsock and ID */
+		true_or_exit(pthread_create(&heartbeat_tid, NULL, heartbeat_thread, NULL) == 0);
+	}
 
 	while (1) {
-		true_or_exit(nvshare_receive_block(rsock, &in_msg, sizeof(in_msg)) == sizeof(in_msg));
+		ssize_t r = nvshare_receive_block(rsock, &in_msg, sizeof(in_msg));
+		if (r != (ssize_t)sizeof(in_msg)) {
+			/*
+			 * r == 0  → EOF (scheduler closed connection / restarted)
+			 * r <  0  → error (ECONNRESET, etc.)
+			 * r >  0 but partial → incomplete message
+			 *
+			 * In all cases: attempt reconnect + re-REGISTER.
+			 */
+			int reconnected = 0;
+			close(rsock);
+			rsock = -1;
+
+			log_warn("client: lost connection to scheduler (r=%zd errno=%d);"
+				 " retrying...", r, errno);
+
+			/*
+			 * Re-use the cached nvshare_client_id so the scheduler
+			 * can match us to its expected-clients set and reuse our
+			 * previous identity without creating a duplicate.
+			 */
+			struct message re_msg = {0};
+			re_msg.type = REGISTER;
+			re_msg.id   = nvshare_client_id; /* previously-cached id */
+			strlcpy(re_msg.pod_name, saved_pod_name,
+				sizeof(re_msg.pod_name));
+			strlcpy(re_msg.pod_namespace, saved_pod_namespace,
+				sizeof(re_msg.pod_namespace));
+
+			for (int retry = 0; retry < 30; retry++) {
+				sleep(1);
+				if (try_connect_and_register(&re_msg, &in_msg) == 0) {
+					log_info("client: reconnected to scheduler after restart"
+						 " (retry %d)", retry + 1);
+					reconnected = 1;
+					break;
+				}
+				log_debug("client: reconnect attempt %d/30 failed", retry + 1);
+			}
+
+			if (!reconnected) {
+				/*
+				 * Degrade: scheduler unreachable for ~30 s.
+				 * Match the "scheduler not running" fail-soft path:
+				 * treat scheduler_on as 0 so every REQ_LOCK is a
+				 * no-op (immediate implicit LOCK_OK via own_lock=1).
+				 */
+				log_warn("client: scheduler unreachable for 30s;"
+					 " degrading to no-anti-thrash");
+				pthread_mutex_lock(&global_mutex);
+				scheduler_on = 0;
+				own_lock = 1;
+				need_lock = 0;
+				pthread_cond_broadcast(&own_lock_cv);
+				pthread_mutex_unlock(&global_mutex);
+				return NULL; /* heartbeat thread keeps running harmlessly */
+			}
+
+			/* Reconnect succeeded — process the REGISTER reply. */
+			goto handle_initial_reply;
+		}
+
 		true_or_exit(pthread_mutex_lock(&global_mutex) == 0);
 
 		switch (in_msg.type) {
@@ -391,7 +517,7 @@ void *client_fn(void *arg __attribute__((unused)))
 			break;
 		}
 
-		/* Done with this messsage */
+		/* Done with this message */
 		true_or_exit(pthread_mutex_unlock(&global_mutex) == 0);
 
 	}
