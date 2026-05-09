@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	resourceName = "nvshare.com/gpu"
+	resourceName = "netgroup.ai/gpu"
 	serverSock   = pluginapi.DevicePluginPath + "nvshare-device-plugin.sock"
 )
 

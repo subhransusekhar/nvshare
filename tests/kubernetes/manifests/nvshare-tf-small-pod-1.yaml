@@ -26,5 +26,5 @@ spec:
     name: nvshare-tf-matmul-small-1-ctr
     resources:
       limits:
-        nvshare.com/gpu: 1
+        netgroup.ai/gpu: 1
 

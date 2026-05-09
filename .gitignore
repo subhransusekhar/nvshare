@@ -9,3 +9,8 @@ nvshare*.tar.gz
 # Don't ignore this file
 !.gitignore
 
+# Claude Code harness (local agent/skill definitions, not for distribution)
+.claude/
+CLAUDE.md
+_workspace/
+

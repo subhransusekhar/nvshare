@@ -55,7 +55,7 @@ func main() {
 	 * Read the underlying GPU UUID from the NVIDIA_VISIBLE_DEVICES environment
 	 * variable. Nvshare device plugin's Pod requests 1 `nvidia.com/gpu` in order
 	 * to isolate it from the rest of the cluster and manage it, exposing it
-	 * as multiple `nvshare.com/gpu` devices.
+	 * as multiple `netgroup.ai/gpu` devices.
 	 *
 	 * Pods (soon to be Nvshare clients) that request an Nvshare GPU device still
 	 * need to have access to the real GPU. As such, we must set the same env

@@ -34,7 +34,7 @@ I've written a [Medium article](https://grgalex.medium.com/gpu-virtualization-in
 - [Deploy on Kubernetes](#deploy_k8s)
   - [Installation (Kubernetes)](#installation_k8s)
   - [Usage (Kubernetes)](#usage_k8s)
-    - [Use an `nvshare.com/gpu` Device](#usage_k8s_device)
+    - [Use an `netgroup.ai/gpu` Device](#usage_k8s_device)
     - [(Optional) Configure scheduler using `nvsharectl`](#usage_k8s_conf)
   - [Test (Kubernetes)](#test_k8s)
   - [Uninstall (Kubernetes)](#uninstall_k8s)
@@ -379,7 +379,7 @@ Deploy the `nvshare` Kubernetes components:
       kubectl apply -f https://raw.githubusercontent.com/grgalex/nvshare/main/kubernetes/manifests/scheduler.yaml
       ```
 
-The Device Plugin runs on every GPU-enabled node in your Kubernetes cluster (currently it will fail on non-GPU nodes but that is OK) and manages a single GPU on every node. It consumes a single `nvidia.com/gpu` device and advertizes it as multiple (by default 10) `nvshare.com/gpu` devices. This means that up to 10 containers can concurrently run on the same physical GPU.
+The Device Plugin runs on every GPU-enabled node in your Kubernetes cluster (currently it will fail on non-GPU nodes but that is OK) and manages a single GPU on every node. It consumes a single `nvidia.com/gpu` device and advertizes it as multiple (by default 10) `netgroup.ai/gpu` devices. This means that up to 10 containers can concurrently run on the same physical GPU.
 
 <a name="usage_k8s"/>
 
@@ -387,11 +387,11 @@ The Device Plugin runs on every GPU-enabled node in your Kubernetes cluster (cur
 
 <a name="usage_k8s_device"/>
 
-#### Use an `nvshare.com/gpu` Device in Your Container
+#### Use an `netgroup.ai/gpu` Device in Your Container
 
-In order to use an `nvshare` virtual GPU, you need to request an 'nvshare.com/gpu' device in the `limits` section of the `resources` of your container.
+In order to use an `nvshare` virtual GPU, you need to request an 'netgroup.ai/gpu' device in the `limits` section of the `resources` of your container.
 
-> Practically, you can replace `nvidia.com/gpu` with `nvshare.com/gpu` in your container specs.
+> Practically, you can replace `nvidia.com/gpu` with `netgroup.ai/gpu` in your container specs.
 
 > You can optionally enable debug logs for any `nvshare`-enabled application by setting the `NVSHARE_DEBUG: "1"` environment variable. You can do this by following the instructions at https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/.
 
@@ -400,7 +400,7 @@ To do this, add the following lines to the container’s spec:
 ```yaml
 resources:
   limits:
-    nvshare.com/gpu: 1
+    netgroup.ai/gpu: 1
 ```
 
 <a name="usage_k8s_conf"/>
