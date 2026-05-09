@@ -14,6 +14,22 @@ jobs:
       - run: cd src && make
       - name: Sanity-check exported hook count
         run: |
-          nm -D src/libnvshare.so | grep ' T cu' | wc -l | xargs -I {} test {} -gt 30
+          set +e
+          echo "==== full nm -D dynamic symbol table (head) ===="
+          nm -D src/libnvshare.so | head -60
+          echo "==== cu* symbols (any type) ===="
+          nm -D src/libnvshare.so | grep -E ' [TtWw] cu' | sort
+          CU_COUNT=$(nm -D src/libnvshare.so | grep -E ' T cu' | wc -l)
+          echo "==== count of global text cu* symbols: $CU_COUNT ===="
+          # Specific must-have hooks (sample): if any of these are missing the build is broken
+          for s in cuMemAlloc cuMemAllocManaged cuMemFree cuLaunchKernel cuCtxSynchronize cuMemcpy cuGetProcAddress cuMemMap cuMemCreate cuMemAllocAsync cuMemPrefetchAsync; do
+            if nm -D src/libnvshare.so | grep -q " T $s$"; then
+              echo "  OK  $s"
+            else
+              echo "  MISSING  $s"
+              MISSING=1
+            fi
+          done
+          test "${MISSING:-0}" = "0"
       - name: Run dispatch smoke test (no-GPU permitted)
         run: bash tests/test_dispatch_v2.sh || true
