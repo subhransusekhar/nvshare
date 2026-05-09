@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-NVSHARE_COMMIT := $(shell git rev-parse HEAD)
+NVSHARE_COMMIT := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 NVSHARE_TAG := $(shell echo $(NVSHARE_COMMIT) | cut -c 1-8)
 VERSION ?= dev
 CC = gcc

@@ -50,6 +50,7 @@
 #define KERN_SYNC_WINDOW_MAX 2048          /* Pending Kernels */
 
 static void *real_dlsym_225(void *handle, const char *symbol);
+static void initialize_libnvshare(void);
 void init_real_funcs(void);
 
 cuCtxSynchronize_func real_cuCtxSynchronize = NULL;
