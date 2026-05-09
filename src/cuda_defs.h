@@ -250,6 +250,27 @@ extern cuMemAllocFromPoolAsync_func  real_cuMemAllocFromPoolAsync;
 extern cuMemPoolCreate_func          real_cuMemPoolCreate;
 extern cuMemPoolDestroy_func         real_cuMemPoolDestroy;
 
+/* CUDA Unified Memory hint types — CUDA 8+ */
+typedef CUresult (*cuMemPrefetchAsync_func)(CUdeviceptr devPtr, size_t count,
+	CUdevice dstDevice, CUstream hStream);
+typedef CUresult (*cuMemAdvise_func)(CUdeviceptr devPtr, size_t count,
+	int /*CUmem_advise*/ advice, CUdevice device);
+typedef CUresult (*cuMemRangeGetAttribute_func)(void *data, size_t dataSize,
+	int /*CUmem_range_attribute*/ attribute, CUdeviceptr devPtr, size_t count);
+
+/* Hooked UM-hints CUDA functions */
+extern CUresult cuMemPrefetchAsync(CUdeviceptr devPtr, size_t count,
+	CUdevice dstDevice, CUstream hStream);
+extern CUresult cuMemAdvise(CUdeviceptr devPtr, size_t count,
+	int advice, CUdevice device);
+extern CUresult cuMemRangeGetAttribute(void *data, size_t dataSize,
+	int attribute, CUdeviceptr devPtr, size_t count);
+
+/* Real UM-hints CUDA function pointers */
+extern cuMemPrefetchAsync_func      real_cuMemPrefetchAsync;
+extern cuMemAdvise_func             real_cuMemAdvise;
+extern cuMemRangeGetAttribute_func  real_cuMemRangeGetAttribute;
+
 /* Hooked CUDA functions */
 extern CUresult cuGetProcAddress(const char *symbol, void **pfn,
 	int cudaVersion, cuuint64_t flags);

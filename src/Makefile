@@ -31,7 +31,7 @@ tarball: libnvshare.so nvshare-scheduler nvsharectl
 	    --no-same-owner \
 	    libnvshare.so nvsharectl nvshare-scheduler
 
-libnvshare.so: hook.o hook_vmm.o hook_async_alloc.o client.o common.o comm.o
+libnvshare.so: hook.o hook_vmm.o hook_async_alloc.o hook_um_hints.o client.o common.o comm.o
 	$(CC) $(GENERAL_LDFLAGS) $(LIBNVSHARE_LDFLAGS) $^ -o $@ $(LIBNVSHARE_LDLIBS)
 
 nvshare-scheduler: scheduler.o state_persist.o common.o comm.o
@@ -47,6 +47,9 @@ hook_vmm.o: hook_vmm.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $^ -o $@
 
 hook_async_alloc.o: hook_async_alloc.c
+	$(CC) $(CFLAGS) $(INCLUDES) -c $^ -o $@
+
+hook_um_hints.o: hook_um_hints.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $^ -o $@
 
 client.o: client.c

@@ -37,6 +37,13 @@ NVSHARE_ASYNC_ALLOC {
         nvshare_get_async_alloc_total;
 };
 
+NVSHARE_UM_HINTS {
+    global:
+        cuMemPrefetchAsync;
+        cuMemAdvise;
+        cuMemRangeGetAttribute;
+};
+
 GLIBC_2.2.5 {
     global:
         dlsym;

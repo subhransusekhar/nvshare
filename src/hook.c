@@ -346,6 +346,28 @@ static void bootstrap_cuda(void)
 	error = dlerror();
 	if (error != NULL)
 		log_debug("cuMemPoolDestroy not found: %s", error);
+
+	/* UM-hints family — non-fatal: added in CUDA 8, universally present */
+	dlerror();
+	real_cuMemPrefetchAsync = (cuMemPrefetchAsync_func)
+		real_dlsym_225(cuda_handle, "cuMemPrefetchAsync");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemPrefetchAsync not found: %s", error);
+
+	dlerror();
+	real_cuMemAdvise = (cuMemAdvise_func)
+		real_dlsym_225(cuda_handle, "cuMemAdvise");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemAdvise not found: %s", error);
+
+	dlerror();
+	real_cuMemRangeGetAttribute = (cuMemRangeGetAttribute_func)
+		real_dlsym_225(cuda_handle, "cuMemRangeGetAttribute");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemRangeGetAttribute not found: %s", error);
 }
 
 /*
@@ -574,6 +596,12 @@ void *dlsym_225(void *handle, const char *symbol)
 		return (void *)(&cuMemPoolCreate);
 	} else if (strcmp(symbol, "cuMemPoolDestroy") == 0) {
 		return (void *)(&cuMemPoolDestroy);
+	} else if (strcmp(symbol, "cuMemPrefetchAsync") == 0) {
+		return (void *)(&cuMemPrefetchAsync);
+	} else if (strcmp(symbol, "cuMemAdvise") == 0) {
+		return (void *)(&cuMemAdvise);
+	} else if (strcmp(symbol, "cuMemRangeGetAttribute") == 0) {
+		return (void *)(&cuMemRangeGetAttribute);
 	}
 
 	return (real_dlsym_225(handle, symbol));
@@ -635,6 +663,12 @@ void *dlsym_234(void *handle, const char *symbol)
 		return (void *)(&cuMemPoolCreate);
 	} else if (strcmp(symbol, "cuMemPoolDestroy") == 0) {
 		return (void *)(&cuMemPoolDestroy);
+	} else if (strcmp(symbol, "cuMemPrefetchAsync") == 0) {
+		return (void *)(&cuMemPrefetchAsync);
+	} else if (strcmp(symbol, "cuMemAdvise") == 0) {
+		return (void *)(&cuMemAdvise);
+	} else if (strcmp(symbol, "cuMemRangeGetAttribute") == 0) {
+		return (void *)(&cuMemRangeGetAttribute);
 	}
 
 	return (real_dlsym_234(handle, symbol));
@@ -727,6 +761,12 @@ CUresult cuGetProcAddress(const char *symbol, void **pfn, int cudaVersion,
 		*pfn = (void *)(&cuMemPoolCreate);
 	} else if (strcmp(symbol, "cuMemPoolDestroy") == 0) {
 		*pfn = (void *)(&cuMemPoolDestroy);
+	} else if (strcmp(symbol, "cuMemPrefetchAsync") == 0) {
+		*pfn = (void *)(&cuMemPrefetchAsync);
+	} else if (strcmp(symbol, "cuMemAdvise") == 0) {
+		*pfn = (void *)(&cuMemAdvise);
+	} else if (strcmp(symbol, "cuMemRangeGetAttribute") == 0) {
+		*pfn = (void *)(&cuMemRangeGetAttribute);
 	} else {
 		result = real_cuGetProcAddress(symbol, pfn, cudaVersion, flags);
 	}
@@ -811,6 +851,12 @@ CUresult cuGetProcAddress_v2(const char *symbol, void **pfn, int cudaVersion,
 		*pfn = (void *)(&cuMemPoolCreate);
 	} else if (strcmp(symbol, "cuMemPoolDestroy") == 0) {
 		*pfn = (void *)(&cuMemPoolDestroy);
+	} else if (strcmp(symbol, "cuMemPrefetchAsync") == 0) {
+		*pfn = (void *)(&cuMemPrefetchAsync);
+	} else if (strcmp(symbol, "cuMemAdvise") == 0) {
+		*pfn = (void *)(&cuMemAdvise);
+	} else if (strcmp(symbol, "cuMemRangeGetAttribute") == 0) {
+		*pfn = (void *)(&cuMemRangeGetAttribute);
 	} else {
 		result = real_cuGetProcAddress_v2(symbol, pfn, cudaVersion,
 				                  flags, symbolStatus);
