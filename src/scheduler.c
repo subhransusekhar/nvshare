@@ -40,6 +40,7 @@
 
 int lock_held;
 time_t lock_acquired_at; /* wall-clock time when current holder got LOCK_OK */
+char active_req_id[17];  /* req_id of the current lock holder; survives dequeue */
 int must_reset_timer;
 pthread_cond_t timer_cv;
 int scheduler_on;
@@ -69,6 +70,7 @@ struct nvshare_client {
 struct nvshare_request {
 	struct nvshare_client *client;
 	time_t received_at; /* wall-clock time when REQ_LOCK arrived */
+	char req_id[17];    /* 16-hex-char request ID from the client + NUL */
 	struct nvshare_request *next;
 };
 
@@ -144,7 +146,7 @@ static int register_client(struct nvshare_client *client, const struct message *
 static int has_registered(struct nvshare_client *client);
 static void client_id_as_string(char *buf, size_t buflen, uint64_t id);
 static void delete_client(struct nvshare_client *client);
-static void insert_req(struct nvshare_client *client);
+static void insert_req(struct nvshare_client *client, const char *req_id);
 static void remove_req(struct nvshare_client *client);
 
 static int has_registered(struct nvshare_client *client)
@@ -200,7 +202,7 @@ static void delete_client(struct nvshare_client *client)
 		log_fatal_errno("Failed to close FD %d", cfd);
 }
 
-static void insert_req(struct nvshare_client *client)
+static void insert_req(struct nvshare_client *client, const char *req_id)
 {
 	struct nvshare_request *r;
 	LL_FOREACH(requests, r) {
@@ -214,6 +216,8 @@ static void insert_req(struct nvshare_client *client)
 	r->next = NULL;
 	r->client = client;
 	r->received_at = time(NULL);
+	memcpy(r->req_id, req_id, 16);
+	r->req_id[16] = 0;
 	LL_APPEND(requests, r);
 }
 
@@ -427,12 +431,22 @@ try_again:
 		return;
 	} else {
 		out_msg.type = LOCK_OK;
+		/* Echo req_id back to client in LOCK_OK data field */
+		memcpy(out_msg.data, requests->req_id, 16);
+		out_msg.data[16] = 0;
+		out_msg.data[17] = 0;
+		out_msg.data[18] = 0;
+		out_msg.data[19] = 0;
+		/* Stash req_id so timer_thr_fn can use it after the request is dequeued */
+		memcpy(active_req_id, requests->req_id, 17);
 		/* FCFS, use head of requests list */
 		ret = send_message(requests->client, &out_msg);
 		if (ret < 0) { /* Client's dead to us */
+			memset(out_msg.data, 0, sizeof(out_msg.data));
 			delete_client(requests->client);
 			goto try_again;
 		}
+		memset(out_msg.data, 0, sizeof(out_msg.data));
 		scheduling_round++;
 		lock_held = 1;
 		lock_acquired_at = time(NULL);
@@ -443,8 +457,8 @@ try_again:
 			metrics_inc_counter("lock_acquisitions_total");
 			metrics_observe_seconds("lock_wait_seconds", wait_s);
 		}
-		log_event("info", "lock_granted", "pod=%s wait_ms=%ld",
-			  requests->client->pod_name, (long)-1);
+		log_event("info", "lock_granted", "req_id=%s pod=%s wait_ms=%ld",
+			  active_req_id, requests->client->pod_name, (long)-1);
 		nvshare_state_persist(); /* callsite: try_schedule (lock grant) */
 		must_reset_timer = 1;
 		pthread_cond_broadcast(&timer_cv);
@@ -504,15 +518,24 @@ remainder:
 			 * Strict handling of clients. If something goes wrong,
 			 * clean them up.
 			 */
+			/* Echo req_id in DROP_LOCK so client can correlate */
+			memcpy(t_msg.data, active_req_id, 16);
+			t_msg.data[16] = 0;
+			t_msg.data[17] = 0;
+			t_msg.data[18] = 0;
+			t_msg.data[19] = 0;
 			if (send_message(requests->client, &t_msg) < 0) {
+				memset(t_msg.data, 0, sizeof(t_msg.data));
 				delete_client(requests->client);
 				try_schedule();
 				drop_lock_sent = 0;
 			} else { /* All good */
 				log_event("info", "drop_lock",
-					  "pod=%s reason=%s",
+					  "req_id=%s pod=%s reason=%s",
+					  active_req_id,
 					  requests->client->pod_name,
 					  "tq_expired");
+				memset(t_msg.data, 0, sizeof(t_msg.data));
 				drop_lock_sent = 1;
 			}
 		} else if (ret != 0) { /* Unrecoverable error */
@@ -645,37 +668,50 @@ static void process_msg(struct nvshare_client *client, const struct message *in_
 	case REQ_LOCK: /* client */
 		log_info("Received %s from %s",
 			 message_type_string[in_msg->type], id_str);
-		log_event("info", "req_lock_received", "pod=%s", client->pod_name);
+		{
+			/* Extract the 16-hex req_id from the message data field */
+			char req_id[17];
+			memcpy(req_id, in_msg->data, 16);
+			req_id[16] = 0;
+			log_event("info", "req_lock_received", "req_id=%s pod=%s",
+				  req_id, client->pod_name);
 
-		if (has_registered(client)) {
-			if (scheduler_on) {
-				insert_req(client);
-				if (!lock_held) try_schedule();
+			if (has_registered(client)) {
+				if (scheduler_on) {
+					insert_req(client, req_id);
+					if (!lock_held) try_schedule();
+				}
+			} else { /* The client is not registered. Slam the door. */
+				delete_client(client);
 			}
-		} else { /* The client is not registered. Slam the door. */
-			delete_client(client);
 		}
 		break;
 
 	case LOCK_RELEASED: /* From client */
 		log_info("Received %s from %s",
 			 message_type_string[in_msg->type], id_str);
-		log_event("info", "lock_released", "pod=%s hold_ms=%ld",
-			  client->pod_name, (long)-1);
+		{
+			/* Client echoes back the req_id it received; use it for correlation */
+			char req_id[17];
+			memcpy(req_id, in_msg->data, 16);
+			req_id[16] = 0;
+			log_event("info", "lock_released", "req_id=%s pod=%s hold_ms=%ld",
+				  req_id, client->pod_name, (long)-1);
 
-		if (has_registered(client)) {
-			/*
-			 * When the scheduler is OFF, LOCK_RELEASED messages
-			 * are meaningless. Mostly a sanity check.
-			 */
-			if (scheduler_on) {
-				/* Early release: client voluntarily returned lock before TQ. */
-				metrics_inc_counter("early_releases_total");
-				remove_req(client);
-				if (!lock_held) try_schedule();
+			if (has_registered(client)) {
+				/*
+				 * When the scheduler is OFF, LOCK_RELEASED messages
+				 * are meaningless. Mostly a sanity check.
+				 */
+				if (scheduler_on) {
+					/* Early release: client voluntarily returned lock before TQ. */
+					metrics_inc_counter("early_releases_total");
+					remove_req(client);
+					if (!lock_held) try_schedule();
+				}
+			} else { /* The client is not registered. Slam the door. */
+				delete_client(client);
 			}
-		} else { /* The client is not registered. Slam the door. */
-			delete_client(client);
 		}
 		break;
 

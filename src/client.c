@@ -26,6 +26,7 @@
 #include <signal.h>
 #include <pthread.h>
 #include <inttypes.h>
+#include <time.h>
 #include <sys/stat.h>
 #include <semaphore.h>
 #include <errno.h>
@@ -71,6 +72,18 @@ static void cuda_sync_context(void) {
 
 
 /*
+ * Generate a 16-hex-char request ID unique within this process.
+ * Uses pid + wall-clock seconds + per-thread counter; not a security ID.
+ */
+static void make_req_id(char out[17])
+{
+	static _Thread_local uint64_t counter = 0;
+	uint64_t r = ((uint64_t)getpid() << 32) ^ ((uint64_t)time(NULL) << 16) ^ ++counter;
+	snprintf(out, 17, "%016lx", r);
+}
+
+
+/*
  * Only returns if the client has the GPU lock or if the scheduler is off.
  */
 void continue_with_lock(void)
@@ -95,6 +108,12 @@ void continue_with_lock(void)
 		 */
 		if (need_lock == 0) {
 			need_lock = 1;
+			make_req_id(req_lock_msg.data);
+			req_lock_msg.data[16] = 0;
+			req_lock_msg.data[17] = 0;
+			req_lock_msg.data[18] = 0;
+			req_lock_msg.data[19] = 0;
+			log_debug("req_lock_sent req_id=%s", req_lock_msg.data);
 			true_or_exit(write_whole(rsock, &req_lock_msg, sizeof(req_lock_msg)) == sizeof(req_lock_msg));
 		}
 
@@ -484,6 +503,12 @@ handle_initial_reply:
 				own_lock = 0; /* Block work submission */
 				cuda_sync_context(); /* Ensure all submitted work done */
 				out_msg.type = LOCK_RELEASED;
+				/* Echo the req_id back to the scheduler for log correlation */
+				memcpy(out_msg.data, in_msg.data, 16);
+				out_msg.data[16] = 0;
+				out_msg.data[17] = 0;
+				out_msg.data[18] = 0;
+				out_msg.data[19] = 0;
 				true_or_exit(write_whole(rsock, &out_msg, sizeof(out_msg)) == sizeof(out_msg));
 				log_debug("Sent %s", message_type_string[out_msg.type]);
 			}
@@ -643,6 +668,12 @@ wait_remainder:
 
 			/* IDLE */
 			log_debug("Releasing the lock early due to inactivity");
+			/* Echo the current req_id so the scheduler can correlate this release */
+			memcpy(release_msg.data, req_lock_msg.data, 16);
+			release_msg.data[16] = 0;
+			release_msg.data[17] = 0;
+			release_msg.data[18] = 0;
+			release_msg.data[19] = 0;
 			true_or_exit(write_whole(rsock, &release_msg, sizeof(release_msg)) == sizeof(release_msg));
 			own_lock = 0;
 			log_debug("Sent %s", message_type_string[release_msg.type]);
