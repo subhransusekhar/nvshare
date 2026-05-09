@@ -16,6 +16,12 @@
  * Export two distinct versions of dlsym, to cover all GLIBC versions.
  */
 
+NVSHARE_PROC_ADDR {
+    global:
+        cuGetProcAddress;
+        cuGetProcAddress_v2;
+};
+
 NVSHARE_VMM {
     global:
         cuMemCreate;
