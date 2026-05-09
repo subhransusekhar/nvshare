@@ -12,17 +12,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM ubuntu:18.04 as build
-COPY ./src/ /src
-WORKDIR /src
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libc6-dev \
-    make
-RUN make libnvshare.so
+# Stage 1: build against glibc 2.31 (Ubuntu 20.04 baseline)
+FROM ubuntu:20.04 AS build-glibc231
+RUN apt-get update && apt-get install -y gcc make libc6-dev
+COPY src /src
+RUN cd /src && make libnvshare.so && mv libnvshare.so libnvshare-glibc2.31.so
 
+# Stage 2: build against glibc 2.35 (Ubuntu 22.04), floor pinned at 2.34
+FROM ubuntu:22.04 AS build-glibc234
+RUN apt-get update && apt-get install -y gcc make libc6-dev
+COPY src /src
+RUN cd /src && make libnvshare.so && mv libnvshare.so libnvshare-glibc2.34.so
 
-FROM ubuntu:18.04
-COPY --from=build /src/libnvshare.so /libnvshare.so
-ENTRYPOINT ["echo", "This container is not meant to be executed"]
+# Stage 3: verify the 2.34 build on Ubuntu 24.04 (glibc 2.39, forward-compat).
+# Fails the build if the binary accidentally pulled in any GLIBC_ symbol newer than 2.34.
+FROM ubuntu:24.04 AS verify-on-2404
+RUN apt-get update && apt-get install -y binutils libc6
+COPY --from=build-glibc234 /src/libnvshare-glibc2.34.so /tmp/lib.so
+RUN ldd /tmp/lib.so > /dev/null \
+    && objdump -T /tmp/lib.so | grep -oE 'GLIBC_[0-9.]+' | sort -V -u > /tmp/syms.txt \
+    && cat /tmp/syms.txt \
+    && ! grep -E 'GLIBC_2\.(3[5-9]|[4-9])' /tmp/syms.txt    # nothing newer than 2.34
 
+# Stage 4: dist — ships both .so files and nothing else
+FROM scratch AS dist
+COPY --from=build-glibc231 /src/libnvshare-glibc2.31.so /
+COPY --from=build-glibc234 /src/libnvshare-glibc2.34.so /

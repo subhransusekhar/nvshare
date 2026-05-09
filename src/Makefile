@@ -14,6 +14,7 @@
 
 NVSHARE_COMMIT := $(shell git rev-parse HEAD)
 NVSHARE_TAG := $(shell echo $(NVSHARE_COMMIT) | cut -c 1-8)
+VERSION ?= dev
 CC = gcc
 GENERAL_LDFLAGS = -Wl,-z,defs -Wl,-z,relro -Wl,-z,now -Wl,--no-undefined
 LIBNVSHARE_LDFLAGS = -shared -Wl,-soname=libnvshare.so -Wl,--version-script=libnvshare-symbols.ld -Wl,--exclude-libs,ALL
@@ -72,6 +73,11 @@ cli.o: cli.c
 
 xopt.o: xopt.c
 	$(CC) $(CFLAGS) -c $^ -o $@
+
+dist-tarball: libnvshare.so nvshare-scheduler nvsharectl
+	mkdir -p ../dist
+	tar czf ../dist/nvshare-$(VERSION).tar.gz \
+	    libnvshare.so nvshare-scheduler nvsharectl
 
 clean:
 	rm -vf *.o *.so nvsharectl nvshare-scheduler nvshare-$(NVSHARE_TAG).tar.gz

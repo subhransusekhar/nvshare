@@ -27,6 +27,18 @@ spec:
         name: nvshare-device-plugin
     spec:
       priorityClassName: system-node-critical
+      initContainers:
+      - name: install-libnvshare
+        image: ghcr.io/subhransusekhar/nvshare-libs:m0
+        command:
+          - /bin/sh
+          - -c
+          - |
+            SO=$(/select-libnvshare.sh)
+            cp "$SO" /host/libnvshare.so
+        volumeMounts:
+          - name: nvshare-host
+            mountPath: /host
       containers:
       - name: nvshare-lib
         image: docker.io/grgalex/nvshare:libnvshare-v0.1-8c2f5b90
@@ -74,6 +86,10 @@ spec:
           limits:
             nvidia.com/gpu: 1
       volumes:
+        - name: nvshare-host
+          hostPath:
+            path: /var/run/nvshare
+            type: DirectoryOrCreate
         - name: host-var-run-nvshare
           hostPath:
             path: /var/run/nvshare
