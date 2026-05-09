@@ -37,6 +37,7 @@
 #include "comm.h"
 #include "common.h"
 #include "cuda_defs.h"
+#include "hook_proc_addr.h"
 #include "client.h"
 #include "utlist.h"
 
@@ -542,136 +543,22 @@ static void *real_dlsym_234(void *handle, const char *symbol)
  */
 void *dlsym_225(void *handle, const char *symbol)
 {
-	if (strncmp(symbol, "cu", 2) != 0) {
-		return (real_dlsym_225(handle, symbol));
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemAlloc)) == 0) {
-		return (void *)(&cuMemAlloc);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemFree)) == 0) {
-		return (void *)(&cuMemFree);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemGetInfo)) == 0) {
-		return (void *)(&cuMemGetInfo);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuGetProcAddress)) == 0) {
-		return (void *)(&cuGetProcAddress);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuGetProcAddress_v2)) == 0) {
-		return (void *)(&cuGetProcAddress_v2);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuInit)) == 0) {
-		return (void *)(&cuInit);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuLaunchKernel)) == 0) {
-		return (void *)(&cuLaunchKernel);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpy)) == 0) {
-		return (void *)(&cuMemcpy);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyAsync)) == 0) {
-		return (void *)(&cuMemcpyAsync);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyDtoH)) == 0) {
-		return (void *)(&cuMemcpyDtoH);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyDtoHAsync)) == 0) {
-		return (void *)(&cuMemcpyDtoHAsync);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyHtoD)) == 0) {
-		return (void *)(&cuMemcpyHtoD);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyHtoDAsync)) == 0) {
-		return (void *)(&cuMemcpyHtoDAsync);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyDtoD)) == 0) {
-		return (void *)(&cuMemcpyDtoD);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyDtoDAsync)) == 0) {
-		return (void *)(&cuMemcpyDtoDAsync);
-	} else if (strcmp(symbol, "cuMemCreate") == 0) {
-		return (void *)(&cuMemCreate);
-	} else if (strcmp(symbol, "cuMemAddressReserve") == 0) {
-		return (void *)(&cuMemAddressReserve);
-	} else if (strcmp(symbol, "cuMemMap") == 0) {
-		return (void *)(&cuMemMap);
-	} else if (strcmp(symbol, "cuMemSetAccess") == 0) {
-		return (void *)(&cuMemSetAccess);
-	} else if (strcmp(symbol, "cuMemUnmap") == 0) {
-		return (void *)(&cuMemUnmap);
-	} else if (strcmp(symbol, "cuMemRelease") == 0) {
-		return (void *)(&cuMemRelease);
-	} else if (strcmp(symbol, "cuMemAllocAsync") == 0) {
-		return (void *)(&cuMemAllocAsync);
-	} else if (strcmp(symbol, "cuMemFreeAsync") == 0) {
-		return (void *)(&cuMemFreeAsync);
-	} else if (strcmp(symbol, "cuMemAllocFromPoolAsync") == 0) {
-		return (void *)(&cuMemAllocFromPoolAsync);
-	} else if (strcmp(symbol, "cuMemPoolCreate") == 0) {
-		return (void *)(&cuMemPoolCreate);
-	} else if (strcmp(symbol, "cuMemPoolDestroy") == 0) {
-		return (void *)(&cuMemPoolDestroy);
-	} else if (strcmp(symbol, "cuMemPrefetchAsync") == 0) {
-		return (void *)(&cuMemPrefetchAsync);
-	} else if (strcmp(symbol, "cuMemAdvise") == 0) {
-		return (void *)(&cuMemAdvise);
-	} else if (strcmp(symbol, "cuMemRangeGetAttribute") == 0) {
-		return (void *)(&cuMemRangeGetAttribute);
-	}
+	void *fn = real_dlsym_225(handle, symbol);
 
-	return (real_dlsym_225(handle, symbol));
+	if (strncmp(symbol, "cu", 2) == 0)
+		nvshare_dispatch_proc_addr(symbol, &fn);
+
+	return fn;
 }
 
 void *dlsym_234(void *handle, const char *symbol)
 {
-	if (strncmp(symbol, "cu", 2) != 0) {
-		return (real_dlsym_234(handle, symbol));
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemAlloc)) == 0) {
-		return (void *)(&cuMemAlloc);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemFree)) == 0) {
-		return (void *)(&cuMemFree);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemGetInfo)) == 0) {
-		return (void *)(&cuMemGetInfo);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuGetProcAddress)) == 0) {
-		return (void *)(&cuGetProcAddress);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuGetProcAddress_v2)) == 0) {
-		return (void *)(&cuGetProcAddress_v2);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuInit)) == 0) {
-		return (void *)(&cuInit);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuLaunchKernel)) == 0) {
-		return (void *)(&cuLaunchKernel);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpy)) == 0) {
-		return (void *)(&cuMemcpy);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyAsync)) == 0) {
-		return (void *)(&cuMemcpyAsync);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyDtoH)) == 0) {
-		return (void *)(&cuMemcpyDtoH);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyDtoHAsync)) == 0) {
-		return (void *)(&cuMemcpyDtoHAsync);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyHtoD)) == 0) {
-		return (void *)(&cuMemcpyHtoD);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyHtoDAsync)) == 0) {
-		return (void *)(&cuMemcpyHtoDAsync);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyDtoD)) == 0) {
-		return (void *)(&cuMemcpyDtoD);
-	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyDtoDAsync)) == 0) {
-		return (void *)(&cuMemcpyDtoDAsync);
-	} else if (strcmp(symbol, "cuMemCreate") == 0) {
-		return (void *)(&cuMemCreate);
-	} else if (strcmp(symbol, "cuMemAddressReserve") == 0) {
-		return (void *)(&cuMemAddressReserve);
-	} else if (strcmp(symbol, "cuMemMap") == 0) {
-		return (void *)(&cuMemMap);
-	} else if (strcmp(symbol, "cuMemSetAccess") == 0) {
-		return (void *)(&cuMemSetAccess);
-	} else if (strcmp(symbol, "cuMemUnmap") == 0) {
-		return (void *)(&cuMemUnmap);
-	} else if (strcmp(symbol, "cuMemRelease") == 0) {
-		return (void *)(&cuMemRelease);
-	} else if (strcmp(symbol, "cuMemAllocAsync") == 0) {
-		return (void *)(&cuMemAllocAsync);
-	} else if (strcmp(symbol, "cuMemFreeAsync") == 0) {
-		return (void *)(&cuMemFreeAsync);
-	} else if (strcmp(symbol, "cuMemAllocFromPoolAsync") == 0) {
-		return (void *)(&cuMemAllocFromPoolAsync);
-	} else if (strcmp(symbol, "cuMemPoolCreate") == 0) {
-		return (void *)(&cuMemPoolCreate);
-	} else if (strcmp(symbol, "cuMemPoolDestroy") == 0) {
-		return (void *)(&cuMemPoolDestroy);
-	} else if (strcmp(symbol, "cuMemPrefetchAsync") == 0) {
-		return (void *)(&cuMemPrefetchAsync);
-	} else if (strcmp(symbol, "cuMemAdvise") == 0) {
-		return (void *)(&cuMemAdvise);
-	} else if (strcmp(symbol, "cuMemRangeGetAttribute") == 0) {
-		return (void *)(&cuMemRangeGetAttribute);
-	}
+	void *fn = real_dlsym_234(handle, symbol);
 
-	return (real_dlsym_234(handle, symbol));
+	if (strncmp(symbol, "cu", 2) == 0)
+		nvshare_dispatch_proc_addr(symbol, &fn);
+
+	return fn;
 }
 
 
@@ -709,69 +596,10 @@ CUresult cuGetProcAddress(const char *symbol, void **pfn, int cudaVersion,
 
 	if (real_cuGetProcAddress == NULL) return CUDA_ERROR_NOT_INITIALIZED;
 
-	if (strcmp(symbol, "cuMemAlloc") == 0) {
-		*pfn = (void *)(&cuMemAlloc);
-	} else if (strcmp(symbol, "cuMemFree") == 0) {
-		*pfn = (void *)(&cuMemFree);
-	} else if (strcmp(symbol, "cuMemGetInfo") == 0) {
-		*pfn = (void *)(&cuMemGetInfo);
-	} else if (strcmp(symbol, "cuGetProcAddress") == 0) {
-		*pfn = (void *)(&cuGetProcAddress);
-	} else if (strcmp(symbol, "cuGetProcAddress_v2") == 0) {
-		*pfn = (void *)(&cuGetProcAddress_v2);
-	} else if (strcmp(symbol, "cuInit") == 0) {
-		*pfn = (void *)(&cuInit);
-	} else if (strcmp(symbol, "cuLaunchKernel") == 0) {
-		*pfn = (void *)(&cuLaunchKernel);
-	} else if (strcmp(symbol, "cuMemcpy") == 0) {
-		*pfn = (void *)(&cuMemcpy);
-	} else if (strcmp(symbol, "cuMemcpyAsync") == 0) {
-		*pfn = (void *)(&cuMemcpyAsync);
-	} else if (strcmp(symbol, "cuMemcpyDtoH") == 0) {
-		*pfn = (void *)(&cuMemcpyDtoH);
-	} else if (strcmp(symbol, "cuMemcpyDtoHAsync") == 0) {
-		*pfn = (void *)(&cuMemcpyDtoHAsync);
-	} else if (strcmp(symbol, "cuMemcpyHtoD") == 0) {
-		*pfn = (void *)(&cuMemcpyHtoD);
-	} else if (strcmp(symbol, "cuMemcpyHtoDAsync") == 0) {
-		*pfn = (void *)(&cuMemcpyHtoDAsync);
-	} else if (strcmp(symbol, "cuMemcpyDtoD") == 0) {
-		*pfn = (void *)(&cuMemcpyDtoD);
-	} else if (strcmp(symbol, "cuMemcpyDtoDAsync") == 0) {
-		*pfn = (void *)(&cuMemcpyDtoDAsync);
-	} else if (strcmp(symbol, "cuMemCreate") == 0) {
-		*pfn = (void *)(&cuMemCreate);
-	} else if (strcmp(symbol, "cuMemAddressReserve") == 0) {
-		*pfn = (void *)(&cuMemAddressReserve);
-	} else if (strcmp(symbol, "cuMemMap") == 0) {
-		*pfn = (void *)(&cuMemMap);
-	} else if (strcmp(symbol, "cuMemSetAccess") == 0) {
-		*pfn = (void *)(&cuMemSetAccess);
-	} else if (strcmp(symbol, "cuMemUnmap") == 0) {
-		*pfn = (void *)(&cuMemUnmap);
-	} else if (strcmp(symbol, "cuMemRelease") == 0) {
-		*pfn = (void *)(&cuMemRelease);
-	} else if (strcmp(symbol, "cuMemAllocAsync") == 0) {
-		*pfn = (void *)(&cuMemAllocAsync);
-	} else if (strcmp(symbol, "cuMemFreeAsync") == 0) {
-		*pfn = (void *)(&cuMemFreeAsync);
-	} else if (strcmp(symbol, "cuMemAllocFromPoolAsync") == 0) {
-		*pfn = (void *)(&cuMemAllocFromPoolAsync);
-	} else if (strcmp(symbol, "cuMemPoolCreate") == 0) {
-		*pfn = (void *)(&cuMemPoolCreate);
-	} else if (strcmp(symbol, "cuMemPoolDestroy") == 0) {
-		*pfn = (void *)(&cuMemPoolDestroy);
-	} else if (strcmp(symbol, "cuMemPrefetchAsync") == 0) {
-		*pfn = (void *)(&cuMemPrefetchAsync);
-	} else if (strcmp(symbol, "cuMemAdvise") == 0) {
-		*pfn = (void *)(&cuMemAdvise);
-	} else if (strcmp(symbol, "cuMemRangeGetAttribute") == 0) {
-		*pfn = (void *)(&cuMemRangeGetAttribute);
-	} else {
-		result = real_cuGetProcAddress(symbol, pfn, cudaVersion, flags);
-	}
-
-	return result;
+	result = real_cuGetProcAddress(symbol, pfn, cudaVersion, flags);
+	if (result != CUDA_SUCCESS) return result;
+	nvshare_dispatch_proc_addr(symbol, pfn);   /* overwrites *pfn if hooked */
+	return CUDA_SUCCESS;
 }
 
 
@@ -792,77 +620,11 @@ CUresult cuGetProcAddress_v2(const char *symbol, void **pfn, int cudaVersion,
 
 	if (real_cuGetProcAddress_v2 == NULL) return CUDA_ERROR_NOT_INITIALIZED;
 
-	/* This covers our custom "if" conditions.
-	 * If we end up calling the real cuGetProcAddress_v2,
-	 * it will overwrite this value.
-	 */
-	if (symbolStatus != NULL)
-		*symbolStatus = CU_GET_PROC_ADDRESS_SUCCESS;
-
-	if (strcmp(symbol, "cuMemAlloc") == 0) {
-		*pfn = (void *)(&cuMemAlloc);
-	} else if (strcmp(symbol, "cuMemFree") == 0) {
-		*pfn = (void *)(&cuMemFree);
-	} else if (strcmp(symbol, "cuMemGetInfo") == 0) {
-		*pfn = (void *)(&cuMemGetInfo);
-	} else if (strcmp(symbol, "cuGetProcAddress") == 0) {
-		*pfn = (void *)(&cuGetProcAddress);
-	} else if (strcmp(symbol, "cuGetProcAddress_v2") == 0) {
-		*pfn = (void *)(&cuGetProcAddress_v2);
-	} else if (strcmp(symbol, "cuInit") == 0) {
-		*pfn = (void *)(&cuInit);
-	} else if (strcmp(symbol, "cuLaunchKernel") == 0) {
-		*pfn = (void *)(&cuLaunchKernel);
-	} else if (strcmp(symbol, "cuMemcpy") == 0) {
-		*pfn = (void *)(&cuMemcpy);
-	} else if (strcmp(symbol, "cuMemcpyAsync") == 0) {
-		*pfn = (void *)(&cuMemcpyAsync);
-	} else if (strcmp(symbol, "cuMemcpyDtoH") == 0) {
-		*pfn = (void *)(&cuMemcpyDtoH);
-	} else if (strcmp(symbol, "cuMemcpyDtoHAsync") == 0) {
-		*pfn = (void *)(&cuMemcpyDtoHAsync);
-	} else if (strcmp(symbol, "cuMemcpyHtoD") == 0) {
-		*pfn = (void *)(&cuMemcpyHtoD);
-	} else if (strcmp(symbol, "cuMemcpyHtoDAsync") == 0) {
-		*pfn = (void *)(&cuMemcpyHtoDAsync);
-	} else if (strcmp(symbol, "cuMemcpyDtoD") == 0) {
-		*pfn = (void *)(&cuMemcpyDtoD);
-	} else if (strcmp(symbol, "cuMemcpyDtoDAsync") == 0) {
-		*pfn = (void *)(&cuMemcpyDtoDAsync);
-	} else if (strcmp(symbol, "cuMemCreate") == 0) {
-		*pfn = (void *)(&cuMemCreate);
-	} else if (strcmp(symbol, "cuMemAddressReserve") == 0) {
-		*pfn = (void *)(&cuMemAddressReserve);
-	} else if (strcmp(symbol, "cuMemMap") == 0) {
-		*pfn = (void *)(&cuMemMap);
-	} else if (strcmp(symbol, "cuMemSetAccess") == 0) {
-		*pfn = (void *)(&cuMemSetAccess);
-	} else if (strcmp(symbol, "cuMemUnmap") == 0) {
-		*pfn = (void *)(&cuMemUnmap);
-	} else if (strcmp(symbol, "cuMemRelease") == 0) {
-		*pfn = (void *)(&cuMemRelease);
-	} else if (strcmp(symbol, "cuMemAllocAsync") == 0) {
-		*pfn = (void *)(&cuMemAllocAsync);
-	} else if (strcmp(symbol, "cuMemFreeAsync") == 0) {
-		*pfn = (void *)(&cuMemFreeAsync);
-	} else if (strcmp(symbol, "cuMemAllocFromPoolAsync") == 0) {
-		*pfn = (void *)(&cuMemAllocFromPoolAsync);
-	} else if (strcmp(symbol, "cuMemPoolCreate") == 0) {
-		*pfn = (void *)(&cuMemPoolCreate);
-	} else if (strcmp(symbol, "cuMemPoolDestroy") == 0) {
-		*pfn = (void *)(&cuMemPoolDestroy);
-	} else if (strcmp(symbol, "cuMemPrefetchAsync") == 0) {
-		*pfn = (void *)(&cuMemPrefetchAsync);
-	} else if (strcmp(symbol, "cuMemAdvise") == 0) {
-		*pfn = (void *)(&cuMemAdvise);
-	} else if (strcmp(symbol, "cuMemRangeGetAttribute") == 0) {
-		*pfn = (void *)(&cuMemRangeGetAttribute);
-	} else {
-		result = real_cuGetProcAddress_v2(symbol, pfn, cudaVersion,
-				                  flags, symbolStatus);
-	}
-
-	return result;
+	result = real_cuGetProcAddress_v2(symbol, pfn, cudaVersion,
+	                                  flags, symbolStatus);
+	if (result != CUDA_SUCCESS) return result;
+	nvshare_dispatch_proc_addr(symbol, pfn);   /* overwrites *pfn if hooked */
+	return CUDA_SUCCESS;
 }
 
 
