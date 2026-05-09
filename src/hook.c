@@ -35,6 +35,7 @@
 #include <inttypes.h>
 
 #include "comm.h"
+#define NVSHARE_COMPONENT "hook"
 #include "common.h"
 #include "cuda_defs.h"
 #include "hook_proc_addr.h"

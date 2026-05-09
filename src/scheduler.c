@@ -30,6 +30,7 @@
 #include <errno.h>
 
 #include "comm.h"
+#define NVSHARE_COMPONENT "scheduler"
 #include "common.h"
 #include "utlist.h"
 #include "state_persist.h"
@@ -410,6 +411,8 @@ try_again:
 		}
 		scheduling_round++;
 		lock_held = 1;
+		log_event("info", "lock_granted", "pod=%s wait_ms=%ld",
+			  requests->client->pod_name, (long)-1);
 		nvshare_state_persist(); /* callsite: try_schedule (lock grant) */
 		must_reset_timer = 1;
 		pthread_cond_broadcast(&timer_cv);
@@ -474,6 +477,10 @@ remainder:
 				try_schedule();
 				drop_lock_sent = 0;
 			} else { /* All good */
+				log_event("info", "drop_lock",
+					  "pod=%s reason=%s",
+					  requests->client->pod_name,
+					  "tq_expired");
 				drop_lock_sent = 1;
 			}
 		} else if (ret != 0) { /* Unrecoverable error */
@@ -515,6 +522,9 @@ void *heartbeat_sweep_thr_fn(void *arg __attribute__((unused)))
 			if (now - c->last_heartbeat_at > 30) {
 				log_warn("[scheduler] HEARTBEAT timeout: dropping client %016" PRIx64,
 					 c->id);
+				log_event("warn", "heartbeat_timeout",
+					  "id=%016" PRIx64 " age_s=%d",
+					  c->id, (int)(now - c->last_heartbeat_at));
 				delete_client(c);
 				if (!lock_held && scheduler_on)
 					try_schedule();
@@ -603,6 +613,7 @@ static void process_msg(struct nvshare_client *client, const struct message *in_
 	case REQ_LOCK: /* client */
 		log_info("Received %s from %s",
 			 message_type_string[in_msg->type], id_str);
+		log_event("info", "req_lock_received", "pod=%s", client->pod_name);
 
 		if (has_registered(client)) {
 			if (scheduler_on) {
@@ -617,6 +628,8 @@ static void process_msg(struct nvshare_client *client, const struct message *in_
 	case LOCK_RELEASED: /* From client */
 		log_info("Received %s from %s",
 			 message_type_string[in_msg->type], id_str);
+		log_event("info", "lock_released", "pod=%s hold_ms=%ld",
+			  client->pod_name, (long)-1);
 
 		if (has_registered(client)) {
 			/*
@@ -762,6 +775,9 @@ int main(int argc __attribute__((unused)), char *argv[] __attribute__((unused)))
 				  " clients_expected=%d", lock_held, ls.n_clients);
 			log_info("scheduler: resumed from state.json — %d client(s) expected",
 				 ls.n_clients);
+			log_event("info", "scheduler_resumed",
+				  "lock_held=%d clients_expected=%d",
+				  lock_held, ls.n_clients);
 		}
 	}
 

@@ -25,6 +25,7 @@
 
 #include "xopt.h"
 #include "comm.h"
+#define NVSHARE_COMPONENT "nvsharectl"
 #include "common.h"
 
 static char nvscheduler_socket_path[NVSHARE_SOCK_PATH_MAX];

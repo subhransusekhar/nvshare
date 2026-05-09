@@ -17,12 +17,84 @@
  */
 
 #include <errno.h>
-#include <unistd.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "common.h"
 
 int __debug = 0;
+
+
+/* --------------------------------------------------------------------------
+ * Structured log emit (issue #13)
+ *
+ * When NVSHARE_LOG_FORMAT=json the output is a single-line JSON object.
+ * Otherwise falls back to a plain-text bracketed line that is identical
+ * in information density to the existing log_info / log_warn macros.
+ * -------------------------------------------------------------------------- */
+
+static int nvshare_log_format_json = -1; /* -1 = not yet probed */
+
+static int json_format_active(void)
+{
+    if (nvshare_log_format_json == -1) {
+        const char *e = getenv("NVSHARE_LOG_FORMAT");
+        nvshare_log_format_json = (e && strcmp(e, "json") == 0) ? 1 : 0;
+    }
+    return nvshare_log_format_json;
+}
+
+/*
+ * Simple JSON string escaper.  Only handles the characters that can
+ * appear in our structured messages: backslash, double-quote, newline.
+ * No full Unicode escaping — messages contain only ASCII.
+ */
+static void escape_json(char *out, size_t cap, const char *in)
+{
+    size_t j = 0;
+    for (size_t i = 0; in[i] && j + 2 < cap; i++) {
+        if (in[i] == '"' || in[i] == '\\') {
+            out[j++] = '\\';
+            out[j++] = in[i];
+        } else if (in[i] == '\n') {
+            out[j++] = '\\';
+            out[j++] = 'n';
+        } else {
+            out[j++] = in[i];
+        }
+    }
+    out[j] = '\0';
+}
+
+void nvshare_log_emit(const char *level, const char *component,
+                      const char *event, const char *fmt, ...)
+{
+    char msg[1024];
+    char esc[1100];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, ap);
+    va_end(ap);
+
+    if (json_format_active()) {
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        escape_json(esc, sizeof(esc), msg);
+        fprintf(stderr,
+            "{\"ts\":\"%ld.%09ld\",\"level\":\"%s\",\"component\":\"%s\","
+            "\"event\":\"%s\",\"pid\":%d,\"msg\":\"%s\"}\n",
+            (long)ts.tv_sec, (long)ts.tv_nsec,
+            level, component, event,
+            (int)getpid(), esc);
+    } else {
+        fprintf(stderr, "[NVSHARE][%s][%s/%s]: %s\n",
+                level, component, event, msg);
+    }
+}
 
 
 /*

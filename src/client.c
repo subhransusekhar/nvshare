@@ -31,6 +31,7 @@
 #include <errno.h>
 
 #include "comm.h"
+#define NVSHARE_COMPONENT "client"
 #include "common.h"
 #include "client.h"
 #include "cuda_defs.h"

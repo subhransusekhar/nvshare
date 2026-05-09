@@ -13,6 +13,28 @@ extern ssize_t write_whole(int fd, const void *buf, size_t count);
 extern ssize_t read_whole(int fd, void *buf, size_t count);
 extern size_t strlcpy(char *dst, const char *src, size_t siz);
 
+/*
+ * Structured log emit.
+ *
+ * When NVSHARE_LOG_FORMAT=json, emits one-line JSON to stderr:
+ *   {"ts":"<sec>.<nsec>","level":"<level>","component":"<component>",
+ *    "event":"<event>","pid":<pid>,"msg":"<escaped>"}
+ * Otherwise emits a human-readable plaintext line.
+ *
+ * Each translation unit that uses log_event() must define NVSHARE_COMPONENT
+ * (e.g. #define NVSHARE_COMPONENT "scheduler") before including this header.
+ */
+extern void nvshare_log_emit(const char *level, const char *component,
+                             const char *event, const char *fmt, ...)
+    __attribute__((format(printf, 4, 5)));
+
+#ifndef NVSHARE_COMPONENT
+#define NVSHARE_COMPONENT "nvshare"
+#endif
+
+#define log_event(level, event, fmt, ...) \
+    nvshare_log_emit(level, NVSHARE_COMPONENT, event, fmt, ##__VA_ARGS__)
+
 
 #define log_fatal_errno(fmt, ...)                             \
 do {                                                          \
