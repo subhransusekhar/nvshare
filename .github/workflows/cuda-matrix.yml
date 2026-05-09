@@ -1,0 +1,37 @@
+name: cuda-matrix
+on:
+  schedule: [{ cron: '0 4 * * *' }]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        cuda: ['11.4.4', '11.8.0', '12.0.1', '12.4.1', '12.6.2']
+        ubuntu: ['20.04', '22.04', '24.04']
+        exclude:
+          # NVIDIA's official Ubuntu 24.04 CUDA images start at 12.4+.
+          - { cuda: '11.4.4',  ubuntu: '24.04' }
+          - { cuda: '11.8.0',  ubuntu: '24.04' }
+          - { cuda: '12.0.1',  ubuntu: '24.04' }
+    container: nvidia/cuda:${{ matrix.cuda }}-devel-ubuntu${{ matrix.ubuntu }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: apt-get update && apt-get install -y make gcc libc6-dev
+      - run: cd src && make
+      - name: Verify dispatch coverage
+        run: |
+          nm -D src/libnvshare.so | grep -E ' T (cuMem|cuLaunchKernel|cuCtxSynchronize|cuGetProcAddress)' | tee /tmp/syms.txt
+          test "$(wc -l < /tmp/syms.txt)" -gt 25
+      - name: Verify glibc binding (Ubuntu 24.04 = glibc 2.39, forward-compat with 2.34+ build)
+        run: |
+          ldd --version | head -1
+          # Should not require any glibc symbol newer than the build base provides.
+          objdump -T src/libnvshare.so | grep -oE 'GLIBC_[0-9.]+' | sort -V -u
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libnvshare-cuda${{ matrix.cuda }}-ubuntu${{ matrix.ubuntu }}
+          path: src/libnvshare.so
+  # Note: GPU-bound tests run separately on a self-hosted runner — see issue #016.

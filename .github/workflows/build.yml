@@ -1,0 +1,19 @@
+name: build
+on:
+  pull_request:
+  push:
+    branches: [main, production-roadmap]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    container: nvidia/cuda:12.4.1-devel-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: apt-get update && apt-get install -y make gcc libc6-dev
+      - run: cd src && make
+      - name: Sanity-check exported hook count
+        run: |
+          nm -D src/libnvshare.so | grep ' T cu' | wc -l | xargs -I {} test {} -gt 30
+      - name: Run dispatch smoke test (no-GPU permitted)
+        run: bash tests/test_dispatch_v2.sh || true

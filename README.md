@@ -1,5 +1,8 @@
 ## `nvshare`: Practical GPU Sharing Without Memory Size Constraints
 
+[![build](https://github.com/subhransusekhar/nvshare/actions/workflows/build.yml/badge.svg)](https://github.com/subhransusekhar/nvshare/actions/workflows/build.yml)
+[![cuda-matrix](https://github.com/subhransusekhar/nvshare/actions/workflows/cuda-matrix.yml/badge.svg)](https://github.com/subhransusekhar/nvshare/actions/workflows/cuda-matrix.yml)
+
 `nvshare` is a GPU sharing mechanism that allows multiple processes (or containers running on Kubernetes) to securely run on the same physical GPU concurrently, each having the whole GPU memory available.
 
 You can watch a quick explanation plus a **demonstration** at https://www.youtube.com/watch?v=9n-5sc5AICY.

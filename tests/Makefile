@@ -59,7 +59,10 @@ push-pytorch-small:
 	docker push $(IMAGE):$(PYTORCH_SMALL_IMAGE_TAG)
 
 
-.PHONY: all build push
+ci-build:
+	cd ../src && make
+
+.PHONY: all build push ci-build
 .PHONY: build-tf build-tf-small build-pytorch build-pytorch-small
 .PHONY: push-tf push-tf-small push-pytorch push-pytorch-small
 
