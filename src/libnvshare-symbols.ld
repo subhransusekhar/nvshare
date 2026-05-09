@@ -16,6 +16,17 @@
  * Export two distinct versions of dlsym, to cover all GLIBC versions.
  */
 
+NVSHARE_VMM {
+    global:
+        cuMemCreate;
+        cuMemAddressReserve;
+        cuMemMap;
+        cuMemSetAccess;
+        cuMemUnmap;
+        cuMemRelease;
+        nvshare_get_vmm_total_bytes;
+};
+
 GLIBC_2.2.5 {
     global:
         dlsym;

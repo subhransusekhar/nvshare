@@ -48,6 +48,7 @@
 #define KERN_SYNC_WINDOW_MAX 2048          /* Pending Kernels */
 
 static void *real_dlsym_225(void *handle, const char *symbol);
+void init_real_funcs(void);
 
 cuCtxSynchronize_func real_cuCtxSynchronize = NULL;
 cuLaunchKernel_func real_cuLaunchKernel = NULL;
@@ -266,6 +267,58 @@ static void bootstrap_cuda(void)
 	error = dlerror();
 	if (error != NULL)
 		log_fatal("%s", error);
+
+	/* VMM family — non-fatal: driver may be too old to have these */
+	dlerror();
+	real_cuMemCreate = (cuMemCreate_func)
+		real_dlsym_225(cuda_handle, "cuMemCreate");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemCreate not found: %s", error);
+
+	dlerror();
+	real_cuMemAddressReserve = (cuMemAddressReserve_func)
+		real_dlsym_225(cuda_handle, "cuMemAddressReserve");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemAddressReserve not found: %s", error);
+
+	dlerror();
+	real_cuMemMap = (cuMemMap_func)
+		real_dlsym_225(cuda_handle, "cuMemMap");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemMap not found: %s", error);
+
+	dlerror();
+	real_cuMemSetAccess = (cuMemSetAccess_func)
+		real_dlsym_225(cuda_handle, "cuMemSetAccess");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemSetAccess not found: %s", error);
+
+	dlerror();
+	real_cuMemUnmap = (cuMemUnmap_func)
+		real_dlsym_225(cuda_handle, "cuMemUnmap");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemUnmap not found: %s", error);
+
+	dlerror();
+	real_cuMemRelease = (cuMemRelease_func)
+		real_dlsym_225(cuda_handle, "cuMemRelease");
+	error = dlerror();
+	if (error != NULL)
+		log_debug("cuMemRelease not found: %s", error);
+}
+
+/*
+ * Public shim called by hook_vmm.c on first entry into any VMM hook.
+ * Triggers the same pthread_once bootstrap that cuInit / cuGetProcAddress use.
+ */
+void init_real_funcs(void)
+{
+	true_or_exit(pthread_once(&init_libnvshare_done, initialize_libnvshare) == 0);
 }
 
 
@@ -463,6 +516,18 @@ void *dlsym_225(void *handle, const char *symbol)
 		return (void *)(&cuMemcpyDtoD);
 	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyDtoDAsync)) == 0) {
 		return (void *)(&cuMemcpyDtoDAsync);
+	} else if (strcmp(symbol, "cuMemCreate") == 0) {
+		return (void *)(&cuMemCreate);
+	} else if (strcmp(symbol, "cuMemAddressReserve") == 0) {
+		return (void *)(&cuMemAddressReserve);
+	} else if (strcmp(symbol, "cuMemMap") == 0) {
+		return (void *)(&cuMemMap);
+	} else if (strcmp(symbol, "cuMemSetAccess") == 0) {
+		return (void *)(&cuMemSetAccess);
+	} else if (strcmp(symbol, "cuMemUnmap") == 0) {
+		return (void *)(&cuMemUnmap);
+	} else if (strcmp(symbol, "cuMemRelease") == 0) {
+		return (void *)(&cuMemRelease);
 	}
 
 	return (real_dlsym_225(handle, symbol));
@@ -502,6 +567,18 @@ void *dlsym_234(void *handle, const char *symbol)
 		return (void *)(&cuMemcpyDtoD);
 	} else if (strcmp(symbol, CUDA_SYMBOL_STRING(cuMemcpyDtoDAsync)) == 0) {
 		return (void *)(&cuMemcpyDtoDAsync);
+	} else if (strcmp(symbol, "cuMemCreate") == 0) {
+		return (void *)(&cuMemCreate);
+	} else if (strcmp(symbol, "cuMemAddressReserve") == 0) {
+		return (void *)(&cuMemAddressReserve);
+	} else if (strcmp(symbol, "cuMemMap") == 0) {
+		return (void *)(&cuMemMap);
+	} else if (strcmp(symbol, "cuMemSetAccess") == 0) {
+		return (void *)(&cuMemSetAccess);
+	} else if (strcmp(symbol, "cuMemUnmap") == 0) {
+		return (void *)(&cuMemUnmap);
+	} else if (strcmp(symbol, "cuMemRelease") == 0) {
+		return (void *)(&cuMemRelease);
 	}
 
 	return (real_dlsym_234(handle, symbol));
@@ -572,6 +649,18 @@ CUresult cuGetProcAddress(const char *symbol, void **pfn, int cudaVersion,
 		*pfn = (void *)(&cuMemcpyDtoD);
 	} else if (strcmp(symbol, "cuMemcpyDtoDAsync") == 0) {
 		*pfn = (void *)(&cuMemcpyDtoDAsync);
+	} else if (strcmp(symbol, "cuMemCreate") == 0) {
+		*pfn = (void *)(&cuMemCreate);
+	} else if (strcmp(symbol, "cuMemAddressReserve") == 0) {
+		*pfn = (void *)(&cuMemAddressReserve);
+	} else if (strcmp(symbol, "cuMemMap") == 0) {
+		*pfn = (void *)(&cuMemMap);
+	} else if (strcmp(symbol, "cuMemSetAccess") == 0) {
+		*pfn = (void *)(&cuMemSetAccess);
+	} else if (strcmp(symbol, "cuMemUnmap") == 0) {
+		*pfn = (void *)(&cuMemUnmap);
+	} else if (strcmp(symbol, "cuMemRelease") == 0) {
+		*pfn = (void *)(&cuMemRelease);
 	} else {
 		result = real_cuGetProcAddress(symbol, pfn, cudaVersion, flags);
 	}
@@ -634,6 +723,18 @@ CUresult cuGetProcAddress_v2(const char *symbol, void **pfn, int cudaVersion,
 		*pfn = (void *)(&cuMemcpyDtoD);
 	} else if (strcmp(symbol, "cuMemcpyDtoDAsync") == 0) {
 		*pfn = (void *)(&cuMemcpyDtoDAsync);
+	} else if (strcmp(symbol, "cuMemCreate") == 0) {
+		*pfn = (void *)(&cuMemCreate);
+	} else if (strcmp(symbol, "cuMemAddressReserve") == 0) {
+		*pfn = (void *)(&cuMemAddressReserve);
+	} else if (strcmp(symbol, "cuMemMap") == 0) {
+		*pfn = (void *)(&cuMemMap);
+	} else if (strcmp(symbol, "cuMemSetAccess") == 0) {
+		*pfn = (void *)(&cuMemSetAccess);
+	} else if (strcmp(symbol, "cuMemUnmap") == 0) {
+		*pfn = (void *)(&cuMemUnmap);
+	} else if (strcmp(symbol, "cuMemRelease") == 0) {
+		*pfn = (void *)(&cuMemRelease);
 	} else {
 		result = real_cuGetProcAddress_v2(symbol, pfn, cudaVersion,
 				                  flags, symbolStatus);

@@ -31,7 +31,7 @@ tarball: libnvshare.so nvshare-scheduler nvsharectl
 	    --no-same-owner \
 	    libnvshare.so nvsharectl nvshare-scheduler
 
-libnvshare.so: hook.o client.o common.o comm.o
+libnvshare.so: hook.o hook_vmm.o client.o common.o comm.o
 	$(CC) $(GENERAL_LDFLAGS) $(LIBNVSHARE_LDFLAGS) $^ -o $@ $(LIBNVSHARE_LDLIBS)
 
 nvshare-scheduler: scheduler.o common.o comm.o
@@ -40,8 +40,11 @@ nvshare-scheduler: scheduler.o common.o comm.o
 nvsharectl: cli.o common.o comm.o xopt.o
 	$(CC) $(CFLAGS) $(INCLUDES) $(GENERAL_LDFLAGS) $^ -o $@
 
-hook.o: hook.c 
-	$(CC) $(CFLAGS) $(INCLUDES) -c $^ -o $@ 
+hook.o: hook.c
+	$(CC) $(CFLAGS) $(INCLUDES) -c $^ -o $@
+
+hook_vmm.o: hook_vmm.c
+	$(CC) $(CFLAGS) $(INCLUDES) -c $^ -o $@
 
 client.o: client.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $^ -o $@

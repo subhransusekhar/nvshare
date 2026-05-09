@@ -147,6 +147,66 @@ typedef nvmlReturn_t (*nvmlInit_func)(void);
 typedef nvmlReturn_t (*nvmlDeviceGetHandleByIndex_func)(unsigned int index,
 	nvmlDevice_t *device);
 
+/* CUDA Virtual Memory Management (VMM) types */
+typedef unsigned long long CUmemGenericAllocationHandle;
+
+typedef struct CUmemAllocationProp_st {
+	/* type: 0=invalid, 1=pinned, 2=... — treat as opaque */
+	unsigned int type;
+	unsigned int requestedHandleTypes;
+	struct {
+		int id;
+	} location;
+	void *win32HandleMetaData;
+	struct {
+		unsigned char compressionType;
+		unsigned char gpuDirectRDMACapable;
+		unsigned short usage;
+		unsigned char reserved[4];
+	} allocFlags;
+} CUmemAllocationProp;
+
+typedef struct CUmemAccessDesc_st {
+	struct {
+		unsigned int type;
+		int id;
+	} location;
+	/* CUmemAccess_flags */
+	unsigned long long flags;
+} CUmemAccessDesc;
+
+typedef CUresult (*cuMemCreate_func)(CUmemGenericAllocationHandle *handle,
+	size_t size, const CUmemAllocationProp *prop, unsigned long long flags);
+typedef CUresult (*cuMemAddressReserve_func)(CUdeviceptr *ptr, size_t size,
+	size_t alignment, CUdeviceptr addr, unsigned long long flags);
+typedef CUresult (*cuMemMap_func)(CUdeviceptr ptr, size_t size, size_t offset,
+	CUmemGenericAllocationHandle handle, unsigned long long flags);
+typedef CUresult (*cuMemSetAccess_func)(CUdeviceptr ptr, size_t size,
+	const CUmemAccessDesc *desc, size_t count);
+typedef CUresult (*cuMemUnmap_func)(CUdeviceptr ptr, size_t size);
+typedef CUresult (*cuMemRelease_func)(CUmemGenericAllocationHandle handle);
+
+
+/* Hooked VMM CUDA functions */
+extern CUresult cuMemCreate(CUmemGenericAllocationHandle *handle, size_t size,
+	const CUmemAllocationProp *prop, unsigned long long flags);
+extern CUresult cuMemAddressReserve(CUdeviceptr *ptr, size_t size,
+	size_t alignment, CUdeviceptr addr, unsigned long long flags);
+extern CUresult cuMemMap(CUdeviceptr ptr, size_t size, size_t offset,
+	CUmemGenericAllocationHandle handle, unsigned long long flags);
+extern CUresult cuMemSetAccess(CUdeviceptr ptr, size_t size,
+	const CUmemAccessDesc *desc, size_t count);
+extern CUresult cuMemUnmap(CUdeviceptr ptr, size_t size);
+extern CUresult cuMemRelease(CUmemGenericAllocationHandle handle);
+extern size_t nvshare_get_vmm_total_bytes(void);
+
+/* Real VMM CUDA function pointers */
+extern cuMemCreate_func          real_cuMemCreate;
+extern cuMemAddressReserve_func  real_cuMemAddressReserve;
+extern cuMemMap_func             real_cuMemMap;
+extern cuMemSetAccess_func       real_cuMemSetAccess;
+extern cuMemUnmap_func           real_cuMemUnmap;
+extern cuMemRelease_func         real_cuMemRelease;
 
 /* Hooked CUDA functions */
 extern CUresult cuGetProcAddress(const char *symbol, void **pfn,
