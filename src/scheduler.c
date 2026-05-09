@@ -32,12 +32,14 @@
 #include "comm.h"
 #define NVSHARE_COMPONENT "scheduler"
 #include "common.h"
+#include "metrics.h"
 #include "utlist.h"
 #include "state_persist.h"
 
 #define NVSHARE_DEFAULT_TQ 30
 
 int lock_held;
+time_t lock_acquired_at; /* wall-clock time when current holder got LOCK_OK */
 int must_reset_timer;
 pthread_cond_t timer_cv;
 int scheduler_on;
@@ -66,6 +68,7 @@ struct nvshare_client {
 /* Holds the requests for the GPU lock, which we serve in an FCFS manner */
 struct nvshare_request {
 	struct nvshare_client *client;
+	time_t received_at; /* wall-clock time when REQ_LOCK arrived */
 	struct nvshare_request *next;
 };
 
@@ -149,6 +152,19 @@ static int has_registered(struct nvshare_client *client)
 	return (client->id != NVSHARE_UNREGISTERED_ID);
 }
 
+/*
+ * Count registered clients.  Caller must hold global_mutex.
+ */
+static int count_clients_locked(void)
+{
+	struct nvshare_client *c;
+	int n = 0;
+	LL_FOREACH(clients, c) {
+		if (has_registered(c)) n++;
+	}
+	return n;
+}
+
 /* Print an nvshare client ID as a hex string */
 static void client_id_as_string(char *buf, size_t buflen, uint64_t id)
 {
@@ -176,6 +192,7 @@ static void delete_client(struct nvshare_client *client)
 		}
 	}
 	nvshare_state_persist(); /* callsite: delete_client */
+	metrics_set_gauge("clients_connected", (double)count_clients_locked());
 
 	true_or_exit(epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cfd, NULL) == 0);
 	/* See man close(2) for EINTR behavior on Linux */
@@ -196,6 +213,7 @@ static void insert_req(struct nvshare_client *client)
 	true_or_exit(r = malloc(sizeof *r));
 	r->next = NULL;
 	r->client = client;
+	r->received_at = time(NULL);
 	LL_APPEND(requests, r);
 }
 
@@ -208,6 +226,11 @@ static void remove_req(struct nvshare_client *client)
 		 * the requests list.
 		 */
 		if (requests->client->fd == client->fd) {
+			if (lock_acquired_at != 0) {
+				double hold_s = difftime(time(NULL), lock_acquired_at);
+				metrics_observe_seconds("lock_hold_seconds", hold_s);
+				lock_acquired_at = 0;
+			}
 			lock_held = 0;
 			nvshare_state_persist(); /* callsite: remove_req (lock release) */
 		}
@@ -282,6 +305,7 @@ again:
 	if ((ret = send_message(client, &out_msg)) < 0)
 		goto out_with_msg;
 	nvshare_state_persist(); /* callsite: register_client */
+	metrics_set_gauge("clients_connected", (double)count_clients_locked());
 
 out_with_msg:
 	/* out_msg is global, so make sure we've zeroed it out */
@@ -411,6 +435,14 @@ try_again:
 		}
 		scheduling_round++;
 		lock_held = 1;
+		lock_acquired_at = time(NULL);
+		{
+			double wait_s = (requests->received_at != 0)
+			    ? difftime(lock_acquired_at, requests->received_at)
+			    : 0.0;
+			metrics_inc_counter("lock_acquisitions_total");
+			metrics_observe_seconds("lock_wait_seconds", wait_s);
+		}
 		log_event("info", "lock_granted", "pod=%s wait_ms=%ld",
 			  requests->client->pod_name, (long)-1);
 		nvshare_state_persist(); /* callsite: try_schedule (lock grant) */
@@ -637,6 +669,8 @@ static void process_msg(struct nvshare_client *client, const struct message *in_
 			 * are meaningless. Mostly a sanity check.
 			 */
 			if (scheduler_on) {
+				/* Early release: client voluntarily returned lock before TQ. */
+				metrics_inc_counter("early_releases_total");
 				remove_req(client);
 				if (!lock_held) try_schedule();
 			}
@@ -732,6 +766,8 @@ int main(int argc __attribute__((unused)), char *argv[] __attribute__((unused)))
 	/* Start listening */
 	true_or_exit(nvshare_bind_and_listen(&lsock, nvscheduler_socket_path) == 0);
 
+	/* Start Prometheus metrics HTTP server on port 9601 */
+	metrics_start_http_server(9601);
 
 	/* Use the 'fd' field of epoll_data for the listening socket events */
 	event.data.fd = lsock;

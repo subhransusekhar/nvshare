@@ -35,6 +35,9 @@ spec:
           allowPrivilegeEscalation: false
           capabilities:
             drop: ["ALL"]
+        ports:
+          - name: metrics
+            containerPort: 9601
         volumeMounts:
           - name: nvshare-socket-directory
             mountPath: /var/run/nvshare
