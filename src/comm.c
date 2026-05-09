@@ -48,6 +48,7 @@ const char *message_type_string[] = {
 	[DROP_LOCK] = "DROP_LOCK",
 	[SET_TQ] = "SET_TQ",
 	[REGISTER] = "REGISTER",
+	[HEARTBEAT] = "HEARTBEAT",
 };
 
 

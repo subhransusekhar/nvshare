@@ -58,6 +58,7 @@ struct nvshare_client {
 	uint64_t id; /* Unique */
 	char pod_name[POD_NAME_LEN_MAX];
 	char pod_namespace[POD_NAMESPACE_LEN_MAX];
+	time_t last_heartbeat_at; /* wall-clock seconds of last HEARTBEAT (or REGISTER) */
 	struct nvshare_client *next;
 };
 
@@ -71,6 +72,7 @@ struct nvshare_client *clients = NULL;
 struct nvshare_request *requests = NULL;
 
 void *timer_thr_fn(void *arg __attribute__((unused)));
+void *heartbeat_sweep_thr_fn(void *arg __attribute__((unused)));
 
 static void bcast_status(void);
 static int send_message(struct nvshare_client *client, struct message *msg_p);
@@ -191,6 +193,7 @@ again:
 		sizeof(client->pod_name));
 	strlcpy(client->pod_namespace, in_msg->pod_namespace,
 		sizeof(client->pod_namespace));
+	client->last_heartbeat_at = time(NULL);
 
 	/*
 	 * Inform the client of the current status of our current status, as
@@ -397,6 +400,41 @@ remainder:
 }
 
 
+/*
+ * Heartbeat sweep thread.
+ *
+ * Runs every 10 seconds.  Any registered client that has not sent a HEARTBEAT
+ * (or REGISTER) within the last 30 seconds is considered a zombie and is
+ * cleaned up via delete_client(), which removes the client from the list,
+ * releases any lock it held, and persists scheduler state.
+ */
+void *heartbeat_sweep_thr_fn(void *arg __attribute__((unused)))
+{
+	struct nvshare_client *c, *next;
+	time_t now;
+
+	while (1) {
+		sleep(10);
+
+		now = time(NULL);
+		true_or_exit(pthread_mutex_lock(&global_mutex) == 0);
+		for (c = clients; c; c = next) {
+			next = c->next;
+			if (!has_registered(c)) continue;
+			if (now - c->last_heartbeat_at > 30) {
+				log_warn("[scheduler] HEARTBEAT timeout: dropping client %016" PRIx64,
+					 c->id);
+				delete_client(c);
+				if (!lock_held && scheduler_on)
+					try_schedule();
+			}
+		}
+		true_or_exit(pthread_mutex_unlock(&global_mutex) == 0);
+	}
+	return NULL;
+}
+
+
 static void process_msg(struct nvshare_client *client, const struct message *in_msg)
 {
 	int newtq;
@@ -503,6 +541,13 @@ static void process_msg(struct nvshare_client *client, const struct message *in_
 		}
 		break;
 
+	case HEARTBEAT: /* client liveness ping — one-way, no reply */
+		log_debug("Received %s from %s",
+			  message_type_string[in_msg->type], id_str);
+
+		client->last_heartbeat_at = time(NULL);
+		break;
+
 	default: /* Unknown message type */
 		log_info("Received message of unknown type %d"
 			 " from %s", (int)in_msg->type, id_str);
@@ -513,6 +558,7 @@ static void process_msg(struct nvshare_client *client, const struct message *in_
 int main(int argc __attribute__((unused)), char *argv[] __attribute__((unused)))
 {
 	pthread_t timer_tid;
+	pthread_t sweep_tid;
 	struct nvshare_client *client;
 	int ret, err, lsock, rsock, num_fds;
 	char *debug_val;
@@ -572,6 +618,9 @@ int main(int argc __attribute__((unused)), char *argv[] __attribute__((unused)))
 
 	/* Spawn the timer thread */
 	true_or_exit(pthread_create(&timer_tid, NULL, timer_thr_fn, NULL) == 0);
+
+	/* Spawn the heartbeat sweep thread */
+	true_or_exit(pthread_create(&sweep_tid, NULL, heartbeat_sweep_thr_fn, NULL) == 0);
 
 	/* Set up fd for epoll */
 	true_or_exit((epoll_fd = epoll_create(1)) >= 0);

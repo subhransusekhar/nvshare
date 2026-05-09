@@ -65,6 +65,7 @@ enum message_type {
 	DROP_LOCK      = 6,
 	LOCK_RELEASED  = 7,
 	SET_TQ         = 8,
+	HEARTBEAT      = 9,    /* M0: one-way liveness ping from client */
 } __attribute__((__packed__));
 
 struct message {

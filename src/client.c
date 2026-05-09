@@ -37,9 +37,11 @@
 
 void *client_fn(void *arg __attribute__((unused)));
 void *release_early_fn(void *arg __attribute__((unused)));
+void *heartbeat_thread(void *arg __attribute__((unused)));
 
 pthread_t client_tid;
 pthread_t release_early_thread_tid;
+pthread_t heartbeat_tid;
 pthread_mutex_t global_mutex;
 pthread_cond_t own_lock_cv;
 pthread_cond_t release_early_cv;
@@ -204,6 +206,46 @@ void initialize_client(void)
 }
 
 
+/*
+ * Heartbeat sender thread.
+ *
+ * Sends a one-way HEARTBEAT message to the scheduler every 5 seconds so the
+ * scheduler can detect zombie clients (those killed without a graceful
+ * disconnect) within a bounded window.
+ *
+ * rsock is read under global_mutex to avoid a race with client_fn which
+ * sets it before spawning this thread; subsequent reads are safe because
+ * rsock is only ever written once (at connection time).
+ */
+void *heartbeat_thread(void *arg __attribute__((unused)))
+{
+	struct message hb_msg = {0};
+	int fd;
+
+	hb_msg.type = HEARTBEAT;
+
+	/*
+	 * Block every signal for this thread. We want the main thread of the
+	 * application to catch all signals.
+	 */
+	sigset_t signal_set;
+	true_or_exit(sigfillset(&signal_set) == 0);
+	true_or_exit(pthread_sigmask(SIG_SETMASK, &signal_set, NULL) == 0);
+
+	while (1) {
+		pthread_mutex_lock(&global_mutex);
+		fd = rsock;
+		pthread_mutex_unlock(&global_mutex);
+
+		if (fd >= 0)
+			(void)nvshare_send_noblock(fd, &hb_msg, sizeof(hb_msg));
+
+		sleep(5);
+	}
+	return NULL;
+}
+
+
 /* The nvshare client main thread.
  *
  * Does the following:
@@ -289,6 +331,9 @@ void *client_fn(void *arg __attribute__((unused)))
 	out_msg.id = nvshare_client_id;
 
 	true_or_exit(sem_post(&got_initial_sched_status) == 0);
+
+	/* Start the heartbeat thread now that we have a valid rsock and ID */
+	true_or_exit(pthread_create(&heartbeat_tid, NULL, heartbeat_thread, NULL) == 0);
 
 	while (1) {
 		true_or_exit(nvshare_receive_block(rsock, &in_msg, sizeof(in_msg)) == sizeof(in_msg));
