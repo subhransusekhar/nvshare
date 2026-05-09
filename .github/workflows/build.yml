@@ -22,8 +22,11 @@ jobs:
           # Symbols may carry a _v2/_v3 suffix (from cuda.h #defines) and/or
           # a @@VERSION tag (from libnvshare-symbols.ld). Match leniently.
           MISSING=0
-          for s in cuMemAlloc cuMemAllocManaged cuMemFree cuMemGetInfo \
-                   cuLaunchKernel cuCtxSynchronize cuMemcpy cuMemcpyAsync \
+          # cuMemAllocManaged and cuCtxSynchronize are intentionally
+          # pass-through (used as real_* pointers from inside other
+          # hooks), so they are NOT exported as nvshare hooks.
+          for s in cuMemAlloc cuMemFree cuMemGetInfo \
+                   cuLaunchKernel cuMemcpy cuMemcpyAsync \
                    cuGetProcAddress cuMemMap cuMemCreate cuMemAllocAsync \
                    cuMemPrefetchAsync; do
             if nm -D src/libnvshare.so | grep -qE " T ${s}(_v[0-9]+)?(@@|$)"; then
