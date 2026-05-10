@@ -27,13 +27,15 @@ TF_SMALL_IMAGE_TAG := tf-matmul-small-$(NVSHARE_TAG)
 PYTORCH_IMAGE_TAG := pytorch-add-$(NVSHARE_TAG)
 # Variant with smaller matrix sizes.
 PYTORCH_SMALL_IMAGE_TAG := pytorch-add-small-$(NVSHARE_TAG)
+# VMM hook path test (expandable_segments / cuMemCreate).
+PYTORCH_VMM_IMAGE_TAG := pytorch-vmm-$(NVSHARE_TAG)
 
 DOCKERFILE_DIR := ./dockerfiles
 
 all: build push
 
 
-build: build-tf build-tf-small build-pytorch build-pytorch-small
+build: build-tf build-tf-small build-pytorch build-pytorch-small build-pytorch-vmm
 build-tf:
 	docker build --pull -t $(IMAGE):$(TF_IMAGE_TAG) \
 	-f $(DOCKERFILE_DIR)/Dockerfile.tsf .
@@ -46,9 +48,12 @@ build-pytorch:
 build-pytorch-small:
 	docker build --pull -t $(IMAGE):$(PYTORCH_SMALL_IMAGE_TAG) \
 	-f $(DOCKERFILE_DIR)/Dockerfile.pytorch.small .
+build-pytorch-vmm:
+	docker build --pull -t $(IMAGE):$(PYTORCH_VMM_IMAGE_TAG) \
+	-f $(DOCKERFILE_DIR)/Dockerfile.pytorch.vmm .
 
 
-push: push-tf push-tf-small push-pytorch push-pytorch-small
+push: push-tf push-tf-small push-pytorch push-pytorch-small push-pytorch-vmm
 push-tf:
 	docker push $(IMAGE):$(TF_IMAGE_TAG)
 push-tf-small:
@@ -57,12 +62,14 @@ push-pytorch:
 	docker push $(IMAGE):$(PYTORCH_IMAGE_TAG)
 push-pytorch-small:
 	docker push $(IMAGE):$(PYTORCH_SMALL_IMAGE_TAG)
+push-pytorch-vmm:
+	docker push $(IMAGE):$(PYTORCH_VMM_IMAGE_TAG)
 
 
 ci-build:
 	cd ../src && make
 
 .PHONY: all build push ci-build
-.PHONY: build-tf build-tf-small build-pytorch build-pytorch-small
-.PHONY: push-tf push-tf-small push-pytorch push-pytorch-small
+.PHONY: build-tf build-tf-small build-pytorch build-pytorch-small build-pytorch-vmm
+.PHONY: push-tf push-tf-small push-pytorch push-pytorch-small push-pytorch-vmm
 
