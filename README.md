@@ -47,7 +47,10 @@ I've written a [Medium article](https://grgalex.medium.com/gpu-virtualization-in
 - [Feedback](#feedbk)
 - [Cite This Work](#cite)
 
-**Operator runbook:** see `docs/runbook.md` for installation verification, env vars, and common-failure mitigation.
+## Documentation
+
+- **[Operator runbook](docs/runbook.md)** — installation verification, tunable env vars, common-failure mitigation, metrics quick-tour, log markers, and soak-test instructions.
+- **[v0.2 release notes](docs/release-notes/v0.2.md)** — M0 production-hardening changelog (issues #1–#17).
 
 <a name="features"/>
 
