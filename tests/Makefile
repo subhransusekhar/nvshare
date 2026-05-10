@@ -69,7 +69,10 @@ push-pytorch-vmm:
 ci-build:
 	cd ../src && make
 
-.PHONY: all build push ci-build
+soak-restart:
+	bash tests/scripts/soak-restart.sh
+
+.PHONY: all build push ci-build soak-restart
 .PHONY: build-tf build-tf-small build-pytorch build-pytorch-small build-pytorch-vmm
 .PHONY: push-tf push-tf-small push-pytorch push-pytorch-small push-pytorch-vmm
 

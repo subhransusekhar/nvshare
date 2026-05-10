@@ -1,0 +1,16 @@
+name: soak-restart
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: Duration in seconds
+        default: '3600'
+
+jobs:
+  soak:
+    runs-on: [self-hosted, gpu]   # to be set up post-M0
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd src && make
+      - run: sudo cp src/libnvshare.so /usr/local/lib/ && sudo cp src/nvshare-scheduler /usr/local/sbin/
+      - run: DURATION_SEC=${{ github.event.inputs.duration }} bash tests/scripts/soak-restart.sh

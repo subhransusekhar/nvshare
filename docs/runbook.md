@@ -78,3 +78,57 @@ After installing nvshare on a local host, verify the setup:
 | `NVSHARE_LOG_FORMAT` | unset | Set to `json` to emit structured JSON log lines to stderr. |
 | `NVSHARE_SCHEDULER_SOCKET` | `/var/run/nvshare/scheduler.sock` | Override the scheduler socket path. |
 | `KUBERNETES_SERVICE_HOST` | unset | Detected automatically; enables Kubernetes pod-name/namespace tagging. |
+
+---
+
+## Running soak tests
+
+The scheduler-restart soak test (`tests/scripts/soak-restart.sh`) exercises the
+restart-resilience work from issues #9 (state.json), #10 (reconnect-with-cached-id),
+and #11 (HEARTBEAT). It runs two PyTorch workloads continuously while killing the
+scheduler with `SIGKILL` at a fixed interval for the full duration, then reports the
+number of Python tracebacks observed.
+
+**Requirements.** A host with an NVIDIA GPU, `nvshare-scheduler` on `PATH`, and
+`/usr/local/lib/libnvshare.so` installed. The script uses `sudo` for scheduler
+management; run it as a user with passwordless sudo or as root.
+
+**Quick start (1 h, kill every 5 min):**
+
+```
+sudo bash tests/scripts/soak-restart.sh
+```
+
+Or via Make (from the repo root):
+
+```
+make -C tests soak-restart
+```
+
+**Environment variables:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `DURATION_SEC` | `3600` | Total soak duration in seconds. |
+| `KILL_INTERVAL_SEC` | `300` | Seconds between each `kill -9` of the scheduler. |
+| `LOG_DIR` | `/tmp/soak-<epoch>` | Directory where per-scheduler and per-client logs are written. |
+
+**Example — short 10-minute smoke run:**
+
+```
+DURATION_SEC=600 KILL_INTERVAL_SEC=60 sudo bash tests/scripts/soak-restart.sh
+```
+
+**Pass condition.** The final output line must read:
+
+```
+actual client crashes: 0
+```
+
+Any non-zero count means a Python traceback appeared in a client log, which indicates
+a regression in the restart-resilience logic.
+
+**GitHub Actions.** `.github/workflows/soak.yml` provides a `workflow_dispatch`
+trigger targeting a `[self-hosted, gpu]` runner. It never runs automatically and
+never blocks PRs. Trigger it manually from the Actions tab when a GPU runner is
+available.
